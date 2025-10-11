@@ -7,7 +7,10 @@ Set of curated Python tools used for image processing. Mainly with artistic purp
 
 ## Recommended usage:
 
-Download this code and use it to modify your ohitis with high detail. This set of tools was designed with the aim to produce artistic imagery, not to perform ML image preprocessing. For this reason, this set of tools allows the user to treat their image as a canvas and apply different digital processing techniques (Data Moshing, Compression, Digital Double Exposition and more).
+Clone or download this repository to explore and modify your own images using the provided tools. The focus of this collection is creative and artistic image processing, not machine learning preprocessing or technical data augmentation. (Feel free to experiment nonetheless)
+
+
+You can combine and customize the utilities to create textures, filters, or generative visual effects. Please use this software responsibly and respect ethical and legal guidelines when working with digital imagery.
 
 ## Examples created with this software:
 
