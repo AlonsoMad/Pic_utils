@@ -4,6 +4,10 @@ import cv2 as cv
 import itertools
 import matplotlib.pyplot as plt
 from PIL import Image
+from typing import List, Tuple, Optional
+from sklearn.cluster import MiniBatchKMeans
+from skimage.segmentation import slic
+
 
 def find_channel_percentiles(image, percentile):
     """
@@ -395,3 +399,143 @@ def conditional_overlay(
         )
 
     return result
+
+
+
+def segment_and_color(
+    image_path: str,
+    n_colors: int,
+    resize: bool = False,
+    target_res: int = 2048,
+    use_superpixels: bool = True,
+    n_superpixels: int = 500,
+    selected_clusters: Optional[List[int]] = None,
+    apply_modular_effect: bool = False,
+    random_state: Optional[int] = 0,
+    show_result: bool = True
+) -> Tuple[np.ndarray, List[np.ndarray], List[np.ndarray]]:
+    """
+    Segment an image into color clusters using MiniBatchKMeans (optionally after
+    superpixel preprocessing), extract per-cluster masks and subimages, and
+    compose a visualization from selected clusters.
+
+    Each selected cluster can optionally be recolored using a unique random
+    modular color transformation before being combined into the final image.
+
+    Parameters
+    ----------
+    image_path : str
+        Path to the input image file.
+    n_colors : int, default=6
+        Number of color clusters for MiniBatchKMeans.
+    resize : bool, default=False
+        Whether to resize the image to a target resolution before processing.
+    target_res : int, default=2048
+        Target size (shorter side) when resizing, preserving aspect ratio.
+    use_superpixels : bool, default=True
+        Whether to preprocess the image with SLIC superpixels before clustering.
+    n_superpixels : int, default=500
+        Number of superpixels to use if `use_superpixels` is True.
+    selected_clusters : list[int], optional
+        Indices of clusters to include in the composed output. If None, all
+        clusters are included.
+    apply_modular_effect : bool, default=False
+        Whether to apply a random modular color transform to each selected cluster
+        before composition.
+    random_state : int, optional
+        Random seed for reproducibility.
+    show_result : bool, default=True
+        If True, displays the final composed image with matplotlib.
+
+    Returns
+    -------
+    composed_image : np.ndarray
+        RGB image composed from the selected (optionally recolored) clusters.
+    masks : list[np.ndarray]
+        Binary masks (H×W) corresponding to each color cluster.
+    subimages : list[np.ndarray]
+        RGB images (H×W×3) showing each cluster in isolation.
+
+    Notes
+    -----
+    - The function performs clustering in the CIELab color space for perceptual
+      accuracy, but returns results in RGB.
+    - Works for any image resolution or aspect ratio.
+    - Each selected cluster gets its own random modular color transform when
+      `apply_modular_effect` is enabled.
+    """
+
+    image_bgr = cv.imread(image_path)
+    if image_bgr is None:
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    image_rgb = cv.cvtColor(image_bgr, cv.COLOR_BGR2RGB)
+
+    if resize:
+        h, w = image_rgb.shape[:2]
+        scale = target_res / min(h, w)
+        new_w, new_h = int(w * scale), int(h * scale)
+        image_rgb = cv.resize(image_rgb, (new_w, new_h), interpolation=cv.INTER_LANCZOS4)
+
+    if use_superpixels:
+        segments = slic(
+            image_rgb,
+            n_segments=n_superpixels,
+            compactness=10,
+            start_label=0,
+            channel_axis=-1
+        )
+        superpixel_image = np.zeros_like(image_rgb, dtype=np.float32)
+        for seg_val in np.unique(segments):
+            mask = segments == seg_val
+            mean_color = image_rgb[mask].mean(axis=0)
+            superpixel_image[mask] = mean_color
+        work_image = superpixel_image.astype(np.uint8)
+    else:
+        work_image = image_rgb
+
+    lab = cv.cvtColor(work_image, cv.COLOR_RGB2LAB)
+    data = lab.reshape((-1, 3))
+
+    kmeans = MiniBatchKMeans(
+        n_clusters=n_colors,
+        random_state=random_state,
+        batch_size=4096
+    )
+    labels = kmeans.fit_predict(data)
+    labels_2d = labels.reshape(lab.shape[:2])
+
+    # ---- Generate masks and subimages ----
+    masks = []
+    subimages = []
+    for i in range(n_colors):
+        mask = (labels_2d == i).astype(np.uint8)
+        masks.append(mask)
+        masked_image = image_rgb.copy()
+        masked_image[mask == 0] = 0
+        subimages.append(masked_image)
+
+    if selected_clusters is None:
+        selected_clusters = list(range(n_colors))
+
+    composed_image = np.zeros_like(image_rgb, dtype=np.uint8)
+
+    for idx in selected_clusters:
+        mask = masks[idx].astype(bool)
+        cluster_img = np.zeros_like(image_rgb)
+        cluster_img[mask] = image_rgb[mask]
+
+        if apply_modular_effect:
+            modules = np.random.randint(255, size=3)
+            offsets = np.random.randint(255, size=3)
+            for c in range(3):
+                cluster_img[:, :, c] = (offsets[c] * cluster_img[:, :, c]) % modules[c]
+
+        composed_image[mask] = cluster_img[mask]
+
+    if show_result:
+        plt.figure(figsize=(6, 6))
+        plt.imshow(composed_image)
+        plt.axis("off")
+        plt.show()
+
+    return composed_image, masks, subimages
