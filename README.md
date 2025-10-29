@@ -15,9 +15,9 @@ You can combine and customize the utilities to create textures, filters, or gene
 ## Examples created with this software:
 
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
-  <img src="examples/DEF_TORO.png" alt="Torus" style="width: 33%;">
-  <img src="examples/DEF_GREEN.png" alt="Psy-Antenna" style="width: 33%;">
-  <img src="examples/la_imagen.png" alt="Psy-Antenna" style="width: 33%;">
+  <img src="examples/DEF_TORO.png" alt="Torus" style="width: 30%;">
+  <img src="examples/DEF_GREEN.png" alt="Psy-Antenna" style="width: 30%;">
+  <img src="examples/la_imagen.png" alt="Psy-Antenna" style="width: 30%;">
   
 </p>
 
