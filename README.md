@@ -14,18 +14,20 @@ You can combine and customize the utilities to create textures, filters, or gene
 
 ## Examples created with this software:
 
-<p align="center">
-  <img src="examples/DEF_TORO.png" alt="Torus" width="100%">
+<p align="center" style="display: flex; justify-content: center; gap: 10px;">
+  <img src="examples/DEF_TORO.png" alt="Torus" style="width: 33%;">
+  <img src="examples/DEF_GREEN.png" alt="Psy-Antenna" style="width: 33%;">
+  <img src="examples/la_imagen.png" alt="Psy-Antenna" style="width: 33%;">
+  
 </p>
-<p align="center">
-  <img src="examples/DEF_GREEN.png" alt="Psy-Antenna" width="100%">
-</p>
+
 <p align="center">
   <img src="examples/lasnubes_texture_masked_centered.png" alt="Lynch-tribute" width="100%">
+
 </p>
 <p align="center">
-  <img src="examples/farola.png" alt="Terrible" width="100%">
+  <img src="examples/granular_flora.png" alt="galaxia" >
 </p>
 <p align="center">
-  <img src="examples/comb_img.png" alt="galaxia" width="100%">
+  <img src="examples/acuarela.png" alt="galaxia" >
 </p>
