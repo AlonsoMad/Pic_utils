@@ -1,12 +1,26 @@
-# Utils for fotography
-import numpy as np
-import cv2 as cv
+"""Quarantined legacy monolith - do not extend.
+
+This module is the former repository-root ``pic_utils.py``, moved here as a
+behavioral reference. Do not add new code to it: every function will be
+reimplemented as a block in Phase 3 (see ``specs/legacy-modernization.md``).
+
+Intentional behavior change (P0-02, per ``specs/stack.md`` section 3): all
+matplotlib usage was removed because library code must not plot at runtime.
+``visualize_permutations`` and ``segment_and_color`` keep their data behavior
+and return values; the plotting is gone. Their ``channel_names`` and
+``show_result`` parameters are retained for call compatibility and are now
+ignored.
+"""
+
 import itertools
-import matplotlib.pyplot as plt
+
+import cv2 as cv
+import numpy as np
 from PIL import Image
-from typing import List, Tuple, Optional
-from sklearn.cluster import MiniBatchKMeans
 from skimage.segmentation import slic
+
+# scikit-learn ships no type information (no py.typed marker), so this import is untyped.
+from sklearn.cluster import MiniBatchKMeans  # type: ignore[import-untyped]
 
 
 def find_channel_percentiles(image, percentile):
@@ -17,7 +31,7 @@ def find_channel_percentiles(image, percentile):
     Parámetros
     ----------
     image : np.ndarray
-        Imagen de entrada en formato NumPy. Puede ser en escala de grises (2D) 
+        Imagen de entrada en formato NumPy. Puede ser en escala de grises (2D)
         o en color (3D) con cualquier número de canales.
     percentile : float
         Percentil a calcular (0-100).
@@ -28,7 +42,7 @@ def find_channel_percentiles(image, percentile):
         Diccionario donde las claves son los índices de canal (0, 1, 2, ...)
         y los valores son los niveles de intensidad correspondientes al
         percentil solicitado.
-    
+
     Ejemplo
     -------
     >>> vals = find_channel_percentiles(img, 95)
@@ -61,7 +75,7 @@ def find_channel_percentiles(image, percentile):
 def visualize_permutations(image, transformations, channel_names):
     """
     Aplica todas las permutaciones posibles de transformaciones a los tres canales
-    de una imagen, las visualiza y devuelve los resultados.
+    de una imagen y devuelve los resultados.
 
     Parámetros
     ----------
@@ -71,8 +85,9 @@ def visualize_permutations(image, transformations, channel_names):
         Lista de funciones de transformación que reciben un canal (2D array)
         y devuelven un canal transformado del mismo tamaño.
     channel_names : dict
-        Diccionario que mapea cada función de `transformations` a un nombre 
-        descriptivo (para títulos en las gráficas).
+        Diccionario que mapea cada función de `transformations` a un nombre
+        descriptivo. Conservado por compatibilidad; ya no se usa porque la
+        visualización con matplotlib fue eliminada (ver docstring del módulo).
 
     Retorna
     -------
@@ -83,26 +98,19 @@ def visualize_permutations(image, transformations, channel_names):
 
     Ejemplo
     -------
-    >>> results = visualize_permutations(img, [np.copy, cv.bitwise_not], 
+    >>> results = visualize_permutations(img, [np.copy, cv.bitwise_not],
                                          {np.copy: "Original", cv.bitwise_not: "Invertido"})
     >>> first = results[0]["image"]
     """
     if image.ndim != 3 or image.shape[2] != 3:
         raise ValueError("La imagen debe tener exactamente 3 canales (BGR).")
-    
+
     b_channel, g_channel, r_channel = cv.split(image)
     permutations = list(itertools.product(transformations, repeat=3))
-    num_permutations = len(permutations)
-
-    # Preparar la figura para visualización
-    fig, axes = plt.subplots(
-        nrows=int(np.ceil(num_permutations / 3)), ncols=3, figsize=(15, num_permutations)
-    )
-    axes = axes.ravel()
 
     results = []
 
-    for i, perm in enumerate(permutations):
+    for perm in permutations:
         # Aplicar transformaciones a cada canal
         b_trans = perm[0](b_channel)
         g_trans = perm[1](g_channel)
@@ -113,36 +121,22 @@ def visualize_permutations(image, transformations, channel_names):
         merged_gray = cv.cvtColor(merged_img, cv.COLOR_BGR2GRAY)
 
         # Guardar el resultado en la lista
-        results.append({
-            "permutation": perm,
-            "image": merged_gray
-        })
-
-        # Mostrar en subplot
-        axes[i].imshow(merged_gray, cmap="gray")
-        axes[i].set_title(
-            f"B: {channel_names[perm[0]]}, "
-            f"G: {channel_names[perm[1]]}, "
-            f"R: {channel_names[perm[2]]}"
-        )
-        axes[i].axis("off")
-
-    # Apagar subplots no usados
-    for j in range(i + 1, len(axes)):
-        axes[j].axis("off")
-
-    plt.tight_layout()
-    plt.show()
+        results.append({"permutation": perm, "image": merged_gray})
 
     return results
 
 
-def overlay_images(background_img, overlay_img, 
-                   x_shift=0, y_shift=0,
-                   y_start=0, y_end=None,
-                   z_order="foreground",
-                   white_to_transparent=True,
-                   resize_overlay=False):
+def overlay_images(
+    background_img,
+    overlay_img,
+    x_shift=0,
+    y_shift=0,
+    y_start=0,
+    y_end=None,
+    z_order="foreground",
+    white_to_transparent=True,
+    resize_overlay=False,
+):
     """
     Superpone una imagen sobre otra, con soporte para desplazamiento,
     redimensionado opcional, orden de apilado y tratamiento de píxeles blancos
@@ -155,15 +149,15 @@ def overlay_images(background_img, overlay_img,
     overlay_img : PIL.Image.Image | np.ndarray
         Imagen a superponer. Puede incluir canal alfa (RGBA).
     x_shift : int, opcional
-        Desplazamiento horizontal de la imagen superpuesta 
+        Desplazamiento horizontal de la imagen superpuesta
         (positivo → derecha, negativo → izquierda).
     y_shift : int, opcional
-        Desplazamiento vertical de la imagen superpuesta 
+        Desplazamiento vertical de la imagen superpuesta
         (positivo → abajo, negativo → arriba).
     y_start : int, opcional
         Coordenada Y inicial donde se coloca la imagen superpuesta.
     y_end : int, opcional
-        Coordenada Y final (define el alto de redimensionado si resize_overlay=True). 
+        Coordenada Y final (define el alto de redimensionado si resize_overlay=True).
         Si es None, se usa la altura completa de la imagen base.
     z_order : str, opcional
         Define el orden de apilado:
@@ -172,7 +166,7 @@ def overlay_images(background_img, overlay_img,
     white_to_transparent : bool, opcional
         Si True, convierte los píxeles blancos de la imagen base en transparentes.
     resize_overlay : bool, opcional
-        Si True, redimensiona la imagen superpuesta para ajustarse al ancho 
+        Si True, redimensiona la imagen superpuesta para ajustarse al ancho
         de la imagen base y a la altura definida por y_start/y_end.
 
     Retorna
@@ -210,7 +204,7 @@ def overlay_images(background_img, overlay_img,
 
     # --- Redimensionar overlay si se indica ---
     if resize_overlay:
-        overlay_pil = overlay_pil.resize((base_w, y_end - y_start), Image.LANCZOS)
+        overlay_pil = overlay_pil.resize((base_w, y_end - y_start), Image.Resampling.LANCZOS)
 
     # --- Convertir blancos a transparente si se indica ---
     if white_to_transparent:
@@ -233,7 +227,6 @@ def overlay_images(background_img, overlay_img,
         result.paste(overlay_pil, (paste_x, paste_y), overlay_pil)
 
     return np.array(result)
-
 
 
 def double_exposure(img1, img2, exposure_factor=0.5, resize_to_match=True):
@@ -281,7 +274,7 @@ def double_exposure(img1, img2, exposure_factor=0.5, resize_to_match=True):
 
     # Redimensionar img2 si es necesario
     if resize_to_match and (h1 != h2 or w1 != w2):
-        img2 = np.array(Image.fromarray(img2).resize((w1, h1), Image.LANCZOS))
+        img2 = np.array(Image.fromarray(img2).resize((w1, h1), Image.Resampling.LANCZOS))
 
     # Convertir a float y normalizar a [0, 1]
     img1_f = img1.astype(np.float32) / 255.0
@@ -303,10 +296,10 @@ def conditional_overlay(
     r_range=None,
     g_range=None,
     b_range=None,
-    color_mode="strict"
+    color_mode="strict",
 ):
     """
-    Superpone una imagen sobre otra de manera condicional, usando 
+    Superpone una imagen sobre otra de manera condicional, usando
     brillo y/o rangos de color como máscara.
 
     Parámetros
@@ -316,7 +309,7 @@ def conditional_overlay(
     overlay_img : np.ndarray | PIL.Image.Image
         Imagen a superponer. Se convierte a RGBA para manejar transparencia.
     brightness_threshold : int | None, opcional
-        Si se especifica, superpone solo donde la luminosidad media de los píxeles 
+        Si se especifica, superpone solo donde la luminosidad media de los píxeles
         sea menor que este valor (0-255).
     r_range, g_range, b_range : tuple[int, int] | None, opcional
         Rangos de intensidad por canal para crear máscaras de color.
@@ -341,7 +334,6 @@ def conditional_overlay(
     ...     b_range=(30, 180),
     ...     color_mode="strict"
     ... )
-    >>> plt.imshow(result); plt.axis("off"); plt.show()
     """
     # --- Convertir imágenes a RGBA ---
     if isinstance(base_img, Image.Image):
@@ -379,9 +371,12 @@ def conditional_overlay(
         b = base_np[..., 2]
 
         masks = []
-        if r_range: masks.append((r >= r_range[0]) & (r <= r_range[1]))
-        if g_range: masks.append((g >= g_range[0]) & (g <= g_range[1]))
-        if b_range: masks.append((b >= b_range[0]) & (b <= b_range[1]))
+        if r_range:
+            masks.append((r >= r_range[0]) & (r <= r_range[1]))
+        if g_range:
+            masks.append((g >= g_range[0]) & (g <= g_range[1]))
+        if b_range:
+            masks.append((b >= b_range[0]) & (b <= b_range[1]))
 
         if masks:
             color_mask = masks[0]
@@ -394,12 +389,11 @@ def conditional_overlay(
     alpha = overlay_np[..., 3] / 255.0
 
     for c in range(3):  # aplicar sobre R, G, B
-        result[..., c][mask] = (
-            (1 - alpha[mask]) * result[..., c][mask] + alpha[mask] * overlay_np[..., c][mask]
-        )
+        result[..., c][mask] = (1 - alpha[mask]) * result[..., c][mask] + alpha[mask] * overlay_np[
+            ..., c
+        ][mask]
 
     return result
-
 
 
 def segment_and_color(
@@ -409,11 +403,11 @@ def segment_and_color(
     target_res: int = 2048,
     use_superpixels: bool = True,
     n_superpixels: int = 500,
-    selected_clusters: Optional[List[int]] = None,
+    selected_clusters: list[int] | None = None,
     apply_modular_effect: bool = False,
-    random_state: Optional[int] = 0,
-    show_result: bool = True
-) -> Tuple[np.ndarray, List[np.ndarray], List[np.ndarray]]:
+    random_state: int | None = 0,
+    show_result: bool = True,
+) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray]]:
     """
     Segment an image into color clusters using MiniBatchKMeans (optionally after
     superpixel preprocessing), extract per-cluster masks and subimages, and
@@ -445,16 +439,17 @@ def segment_and_color(
     random_state : int, optional
         Random seed for reproducibility.
     show_result : bool, default=True
-        If True, displays the final composed image with matplotlib.
+        Retained for backward compatibility; ignored. Plotting was removed from
+        library code (see the module docstring).
 
     Returns
     -------
     composed_image : np.ndarray
         RGB image composed from the selected (optionally recolored) clusters.
     masks : list[np.ndarray]
-        Binary masks (H×W) corresponding to each color cluster.
+        Binary masks (HxW) corresponding to each color cluster.
     subimages : list[np.ndarray]
-        RGB images (H×W×3) showing each cluster in isolation.
+        RGB images (HxWx3) showing each cluster in isolation.
 
     Notes
     -----
@@ -478,11 +473,7 @@ def segment_and_color(
 
     if use_superpixels:
         segments = slic(
-            image_rgb,
-            n_segments=n_superpixels,
-            compactness=10,
-            start_label=0,
-            channel_axis=-1
+            image_rgb, n_segments=n_superpixels, compactness=10, start_label=0, channel_axis=-1
         )
         superpixel_image = np.zeros_like(image_rgb, dtype=np.float32)
         for seg_val in np.unique(segments):
@@ -491,16 +482,12 @@ def segment_and_color(
             superpixel_image[mask] = mean_color
         work_image = superpixel_image.astype(np.uint8)
     else:
-        work_image = image_rgb
+        work_image = image_rgb.astype(np.uint8)
 
     lab = cv.cvtColor(work_image, cv.COLOR_RGB2LAB)
     data = lab.reshape((-1, 3))
 
-    kmeans = MiniBatchKMeans(
-        n_clusters=n_colors,
-        random_state=random_state,
-        batch_size=4096
-    )
+    kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=random_state, batch_size=4096)
     labels = kmeans.fit_predict(data)
     labels_2d = labels.reshape(lab.shape[:2])
 
@@ -531,11 +518,5 @@ def segment_and_color(
                 cluster_img[:, :, c] = (offsets[c] * cluster_img[:, :, c]) % modules[c]
 
         composed_image[mask] = cluster_img[mask]
-
-    if show_result:
-        plt.figure(figsize=(6, 6))
-        plt.imshow(composed_image)
-        plt.axis("off")
-        plt.show()
 
     return composed_image, masks, subimages
