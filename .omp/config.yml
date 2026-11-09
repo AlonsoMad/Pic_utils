@@ -1,0 +1,10 @@
+tools:
+  approvalMode: write          # main session: read/write auto, exec prompts
+
+task:
+  batch: true
+  maxConcurrency: 6
+  isolation:
+    enabled: true
+    merge: branch              # commit to omp/task/<id>
+    apply: false               # keep the branch for review
