@@ -170,6 +170,7 @@ flowchart TD
 ```
 src/pic_utils/
 ├── __init__.py
+├── __main__.py             # python -m pic_utils
 ├── app.py                  # main(): spawn setup, QApplication, wiring
 ├── settings.py             # typed QSettings wrapper
 ├── logging_setup.py        # app log + per-run log helpers
@@ -221,6 +222,7 @@ src/pic_utils/
 │   ├── i18n.py             # LanguageManager, retranslate protocol
 │   ├── theme.py
 │   ├── lab/
+│   │   ├── page.py          # Lab composition root (layout + panel wiring)
 │   │   ├── block_library.py
 │   │   ├── pipeline_editor.py
 │   │   ├── parameter_panel.py
@@ -230,11 +232,13 @@ src/pic_utils/
 │   │   ├── project_actions.py
 │   │   └── commands.py
 │   ├── canvas/
+│   │   ├── page.py          # Canvas composition root
 │   │   ├── canvas_view.py
 │   │   ├── layer_list.py
 │   │   ├── layer_properties.py
 │   │   ├── asset_tray.py
 │   │   ├── export_dialog.py
+│   │   ├── actions.py       # save/load/export actions
 │   │   └── commands.py
 │   ├── widgets/
 │   │   ├── param_widgets.py
@@ -2177,6 +2181,13 @@ def main() -> int:
 
 Each task is independently reviewable and ends with the quality gates.
 Tasks MUST NOT start before their dependencies are merged.
+
+> **Execution source of truth:** `specs/implementation-plan.md` refines this
+> list into eight phases with branch ownership, review protocol, and
+> acceptance gates. It adds three execution tasks: **P5-10** (Lab
+> composition), **P6-07** (Canvas composition), and **P7-05** (release gate).
+> When this section and the implementation plan differ on ordering or
+> ownership, the implementation plan wins; on contracts, this document wins.
 
 ### 22.1 Task graph
 
