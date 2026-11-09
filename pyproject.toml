@@ -36,9 +36,9 @@ packages = ["src/pic_utils"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# The legacy monolith is quarantined by P0-02; keep `ruff check .` /
-# `ruff format --check .` green until it is deleted.
-extend-exclude = ["pic_utils.py", "*.md"]  # *.md: specs are human-owned; code blocks there are illustrative, not linted
+# *.md: specs are human-owned; ruff >= 0.17 formats Python code blocks inside
+# Markdown, and the spec code blocks are illustrative, not linted.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
