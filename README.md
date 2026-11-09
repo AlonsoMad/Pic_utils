@@ -31,3 +31,22 @@ You can combine and customize the utilities to create textures, filters, or gene
 <p align="center">
   <img src="examples/acuarela.png" alt="galaxia" >
 </p>
+
+## Development
+
+Prerequisites: Python 3.12 and [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync --extra dev
+```
+
+Layout: package code lives under `src/pic_utils/`, tests under `tests/`.
+
+Quality gates:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src
+uv run pytest -q
+```
