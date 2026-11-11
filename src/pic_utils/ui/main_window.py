@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         self._languages = languages
 
         self._lab_page = LabPage(settings)
-        self._canvas_page = CanvasPage()
+        self._canvas_page = CanvasPage(settings)
         self._stack = QStackedWidget(self)
         self._stack.addWidget(self._lab_page)
         self._stack.addWidget(self._canvas_page)
@@ -67,6 +67,11 @@ class MainWindow(QMainWindow):
         self.blocks_reload_requested.connect(self._lab_page.library().reload_now)
         self._lab_page.notify.connect(self.statusBar().showMessage)
         self._lab_page.launch_requested.connect(self._on_launch_requested)
+
+        # Canvas glue: open, save, export, and status (P6-07).
+        self.canvas_open_requested.connect(self._canvas_page.open_canvas)
+        self._canvas_page.notify.connect(self.statusBar().showMessage)
+        self._canvas_page.canvas_status.connect(self.statusBar().showMessage)
 
         self._progress = QProgressBar(self)
         self._progress.hide()
@@ -115,10 +120,33 @@ class MainWindow(QMainWindow):
         menu_bar.addMenu(self._tools_menu)
         menu_bar.addMenu(self._help_menu)
 
+        self._new_canvas = QAction(self._file_menu)
+        self._new_canvas.triggered.connect(self._canvas_page.new_document)
+        self._file_menu.addAction(self._new_canvas)
+
         self._open_project = QAction(self._file_menu)
         self._open_project.setShortcut(QKeySequence.StandardKey.Open)
         self._open_project.triggered.connect(self._open_project_dialog)
         self._file_menu.addAction(self._open_project)
+
+        self._open_canvas = QAction(self._file_menu)
+        self._open_canvas.triggered.connect(self._open_canvas_dialog)
+        self._file_menu.addAction(self._open_canvas)
+
+        self._save_canvas = QAction(self._file_menu)
+        self._save_canvas.setShortcut(QKeySequence.StandardKey.Save)
+        self._save_canvas.triggered.connect(lambda: self._canvas_page.save_canvas(self))
+        self._file_menu.addAction(self._save_canvas)
+
+        self._save_canvas_as = QAction(self._file_menu)
+        self._save_canvas_as.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self._save_canvas_as.triggered.connect(lambda: self._canvas_page.save_canvas_as(self))
+        self._file_menu.addAction(self._save_canvas_as)
+
+        self._export_canvas = QAction(self._file_menu)
+        self._export_canvas.setShortcut(QKeySequence("Ctrl+E"))
+        self._export_canvas.triggered.connect(lambda: self._canvas_page.export_canvas(self))
+        self._file_menu.addAction(self._export_canvas)
 
         self._reload_blocks = QAction(self._tools_menu)
         self._reload_blocks.triggered.connect(self._reload_blocks_slot)
@@ -151,6 +179,7 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentWidget(self._lab_page)
         else:
             self._stack.setCurrentWidget(self._canvas_page)
+            self._canvas_page.refresh_status()
 
     # --- run progress (FR-UI-05) ----------------------------------------------
 
@@ -168,6 +197,10 @@ class MainWindow(QMainWindow):
         assert layout is not None
         layout.addWidget(widget)
 
+    def canvas_page(self) -> CanvasPage:
+        """The Canvas page (tests and integrations)."""
+        return self._canvas_page
+
     # --- dialogs and actions -----------------------------------------------------
 
     def _open_project_dialog(self) -> None:
@@ -179,6 +212,16 @@ class MainWindow(QMainWindow):
         )
         if path:
             self.project_open_requested.emit(Path(path))
+
+    def _open_canvas_dialog(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            self.tr("Open canvas"),
+            "",
+            self.tr("Pic Utils canvas (*.pucanvas *.canvas)"),
+        )
+        if path:
+            self.canvas_open_requested.emit(Path(path))
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self._settings, self._languages, self)
@@ -246,7 +289,12 @@ class MainWindow(QMainWindow):
         self._file_menu.setTitle(self.tr("&File"))
         self._tools_menu.setTitle(self.tr("&Tools"))
         self._help_menu.setTitle(self.tr("&Help"))
+        self._new_canvas.setText(self.tr("&New canvas"))
         self._open_project.setText(self.tr("&Open project…"))
+        self._open_canvas.setText(self.tr("Open &canvas…"))
+        self._save_canvas.setText(self.tr("&Save canvas"))
+        self._save_canvas_as.setText(self.tr("Save canvas &as…"))
+        self._export_canvas.setText(self.tr("&Export canvas…"))
         self._reload_blocks.setText(self.tr("&Reload blocks"))
         self._settings_action.setText(self.tr("Se&ttings…"))
         self._copy_diagnostics.setText(self.tr("&Copy diagnostics"))

@@ -105,6 +105,11 @@ class AcceptedIndex:
         self._results_root = Path(results_root)
         self._accepted: dict[str, dict[str, ResultRecord]] = {}  # run_id -> id -> record
 
+    @property
+    def results_root(self) -> Path:
+        """The results root this index scans."""
+        return self._results_root
+
     def refresh(self) -> None:
         """Rescan every run and rebuild the index from disk."""
         indexed: dict[str, dict[str, ResultRecord]] = {}
