@@ -29,6 +29,7 @@ from PySide6.QtCore import QObject, Signal
 
 from pic_utils import __version__
 from pic_utils.blocks.api import BLOCK_API_VERSION
+from pic_utils.blocks.registry import BlockRegistry
 from pic_utils.core.errors import (
     BLOCK_TIMEOUT,
     MEMORY_LIMIT,
@@ -198,6 +199,12 @@ class RunService(QObject):
             # 3. Copy the user-block sources (§8.7 step 3).
             self._copy_user_blocks(request, disk)
 
+            # The run binds to the COPIED blocks folder with fresh-state
+            # semantics: the app's long-lived registry keeps last-good hashes
+            # for broken files (§5.4), which the worker cannot reproduce —
+            # both sides must hash the identical on-disk copy (§8.2).
+            run_hash = BlockRegistry(disk.blocks_dir()).snapshot().hash
+
             # 4. Load sources into shared memory (§8.7 step 4).
             guard = MemoryGuard(ceiling_mb=request.settings.memory_ceiling_mb)
             loaded, skipped = self._load_sources(request)
@@ -211,14 +218,16 @@ class RunService(QObject):
 
             # 5. Plan (§8.7 step 5).
             plan = build_plan(request.run_config, request.pipeline, request.snapshot, len(loaded))
-            header = self._manifest_header(request, run_id, loaded, second, plan, skipped, guard)
+            header = self._manifest_header(
+                request, run_id, run_hash, loaded, second, plan, skipped, guard
+            )
             disk.create(header)
 
             self.run_started.emit(run_id, len(plan))
 
             # 6-8. Pool, dispatch, collect, finalize.
             summary = self._execute(
-                request, run_id, disk, guard, plan, handles, second, loaded, log
+                request, run_id, run_hash, disk, guard, plan, handles, second, loaded, log
             )
             header["summary"] = {
                 "completed": summary.completed,
@@ -293,6 +302,7 @@ class RunService(QObject):
         self,
         request: RunRequest,
         run_id: str,
+        run_hash: str,
         loaded: list[tuple[Path, Image]],
         second: tuple[ImageHandle, Image] | None,
         plan: list[ExperimentSpec],
@@ -310,7 +320,7 @@ class RunService(QObject):
             "created_at": RunStore.now_utc_iso(),
             "app_version": __version__,
             "block_api_version": BLOCK_API_VERSION,
-            "block_snapshot_hash": request.snapshot.hash,
+            "block_snapshot_hash": run_hash,
             "pipeline": request.pipeline.to_dict(),
             "run_config": {
                 "mode": request.run_config.mode,
@@ -355,6 +365,7 @@ class RunService(QObject):
         self,
         request: RunRequest,
         run_id: str,
+        run_hash: str,
         disk: RunStore,
         guard: MemoryGuard,
         plan: list[ExperimentSpec],
@@ -391,7 +402,7 @@ class RunService(QObject):
             event_queue=_spawn_queue(),
             blocks_dir=str(disk.blocks_dir()),
             run_dir=str(disk.run_dir),
-            block_snapshot_hash=request.snapshot.hash,
+            block_snapshot_hash=run_hash,
             log_level="DEBUG",
         )
         pool.start(init)
@@ -446,7 +457,7 @@ class RunService(QObject):
                         pipeline=request.pipeline.to_dict(),
                         source=handles[spec.source_index],
                         second=None if second is None else second[0],
-                        block_snapshot_hash=request.snapshot.hash,
+                        block_snapshot_hash=run_hash,
                     )
                     outstanding[pool.submit(task)] = spec
                     next_index += 1

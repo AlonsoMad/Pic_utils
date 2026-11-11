@@ -144,6 +144,7 @@ def make_task(
     store: SharedImageStore,
     pipeline: Pipeline,
     experiment_index: int,
+    snapshot_hash: str | None = None,
 ) -> ExperimentTask:
     return ExperimentTask(
         run_id=run.run_id,
@@ -158,8 +159,11 @@ def make_task(
         pipeline=pipeline.to_dict(),
         source=store.put(Image(rgb_gradient(8))),
         second=None,
-        block_snapshot_hash="",
+        block_snapshot_hash=snapshot_hash if snapshot_hash is not None else _last_init_hash,
     )
+
+
+_last_init_hash = ""
 
 
 def start_pool(
@@ -178,12 +182,14 @@ def start_pool(
         block_snapshot_hash=BlockRegistry(blocks_dir).snapshot().hash,
         log_level="DEBUG",
     )
+    global _last_init_hash
     pool = SupervisedPool(
         events.callbacks(),
         experiment_timeout_s=timeout_s,
         max_rebuilds=max_rebuilds,
         poll_interval_s=0.2,
     )
+    _last_init_hash = init.block_snapshot_hash
     pool.start(init)
     return pool
 

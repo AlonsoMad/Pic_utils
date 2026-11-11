@@ -36,6 +36,7 @@ from pic_utils.core.errors import (
     BlockError,
     ExportError,
     InvalidBlockOutput,
+    RunError,
 )
 from pic_utils.core.paths import content_hash
 from pic_utils.io.saver import save_image
@@ -140,6 +141,10 @@ def init_worker(init: WorkerInit, events: EventQueue) -> None:
     _worker_events = events
     _worker_pid = os.getpid()
     events.put(WorkerReady(pid=_worker_pid))
+    # §18.3: the parent sends the configured level; without this the root
+    # logger stays at WARNING and INFO/DEBUG records never reach run.log.
+    level = logging.getLevelName(init.log_level.upper())
+    logging.getLogger().setLevel(level if isinstance(level, int) else logging.WARNING)
     _install_queue_log_handler(events, _worker_pid)
 
     blocks_dir = Path(init.blocks_dir) if init.blocks_dir else None
@@ -161,7 +166,13 @@ def _set_snapshot(expected_hash: str, blocks_dir: Path | None) -> None:
     for module_info in pkgutil.iter_modules(builtin_package.__path__):
         if module_info.name.startswith("_"):
             continue
-        module = importlib.import_module(f"{builtin_package.__name__}.{module_info.name}")
+        try:
+            module = importlib.import_module(f"{builtin_package.__name__}.{module_info.name}")
+        except Exception:
+            # The registry (§5.4) degrades gracefully per module; the worker
+            # mirrors that instead of dying in the pool initializer.
+            logger.exception("built-in module %s failed to import", module_info.name)
+            continue
         for definition in collect_block_defs(module, source=None, content_hash=""):
             if definition.name in definitions:
                 errors.append(
@@ -247,6 +258,11 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
     try:
         pipeline = Pipeline.from_dict(task.pipeline)
         store = RunStore(Path(task.run_dir).parent, task.run_id)
+        if task.block_snapshot_hash != _worker_snapshot_hash:
+            # §8.3 step 2: rebuild when the hash differs; the service stamps
+            # one hash per run, so a difference means the run's blocks
+            # changed under us — fail loudly rather than run stale code.
+            raise RunError(code=BLOCK_SNAPSHOT_MISMATCH)
         source = attach_image(task.source)
         second = attach_image(task.second) if task.second is not None else None
         # _WorkerSnapshot mirrors BlockSnapshot field-for-field; the real
@@ -276,6 +292,21 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
                 results=(),
             )
         output = execute_pipeline(pipeline, snapshot, source, second, task.experiment)
+        results: list[ResultFile] = []
+        for layer_index, layer in enumerate(output.layers):
+            result_path = store.result_file(task.experiment.index, layer_index)
+            thumb_path = store.thumb_file(task.experiment.index, layer_index)
+            save_image(layer.image, result_path)
+            save_image(layer.image.to_proxy(_THUMB_LONG_SIDE), thumb_path)
+            results.append(
+                ResultFile(
+                    layer_index=layer_index,
+                    path=result_path.relative_to(store.run_dir).as_posix(),
+                    thumb_path=thumb_path.relative_to(store.run_dir).as_posix(),
+                    width=layer.image.width,
+                    height=layer.image.height,
+                )
+            )
     except InvalidBlockOutput as error:
         logger.exception("experiment %s failed: invalid block output", task.experiment.index)
         return ExperimentOutcome(
@@ -286,22 +317,36 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
             elapsed_ms=_elapsed_ms(started),
             results=(),
         )
+    except ExportError as error:
+        # Result/thumbnail write failures (§18.2: io.write — the batch
+        # continues); the writes live inside the try so they are covered.
+        logger.exception("experiment %s failed: could not write results", task.experiment.index)
+        return ExperimentOutcome(
+            experiment_index=task.experiment.index,
+            status="failed",
+            error_code=IO_WRITE,
+            error_message=str(error),
+            elapsed_ms=_elapsed_ms(started),
+            results=(),
+        )
+    except RunError as error:
+        # Infrastructure failures (shm.unavailable, snapshot mismatch) keep
+        # their own stable code instead of being relabeled block.raised.
+        logger.exception("experiment %s failed: %s", task.experiment.index, error.code)
+        return ExperimentOutcome(
+            experiment_index=task.experiment.index,
+            status="failed",
+            error_code=error.code,
+            error_message=str(error),
+            elapsed_ms=_elapsed_ms(started),
+            results=(),
+        )
     except BlockError as error:
         logger.exception("experiment %s failed: block raised", task.experiment.index)
         return ExperimentOutcome(
             experiment_index=task.experiment.index,
             status="failed",
             error_code=BLOCK_RAISED,
-            error_message=str(error),
-            elapsed_ms=_elapsed_ms(started),
-            results=(),
-        )
-    except ExportError as error:
-        logger.exception("experiment %s failed: could not write results", task.experiment.index)
-        return ExperimentOutcome(
-            experiment_index=task.experiment.index,
-            status="failed",
-            error_code=IO_WRITE,
             error_message=str(error),
             elapsed_ms=_elapsed_ms(started),
             results=(),
@@ -318,21 +363,6 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
             error_message=str(error),
             elapsed_ms=_elapsed_ms(started),
             results=(),
-        )
-    results: list[ResultFile] = []
-    for layer_index, layer in enumerate(output.layers):
-        result_path = store.result_file(task.experiment.index, layer_index)
-        thumb_path = store.thumb_file(task.experiment.index, layer_index)
-        save_image(layer.image, result_path)
-        save_image(layer.image.to_proxy(_THUMB_LONG_SIDE), thumb_path)
-        results.append(
-            ResultFile(
-                layer_index=layer_index,
-                path=result_path.relative_to(store.run_dir).as_posix(),
-                thumb_path=thumb_path.relative_to(store.run_dir).as_posix(),
-                width=layer.image.width,
-                height=layer.image.height,
-            )
         )
     return ExperimentOutcome(
         experiment_index=task.experiment.index,

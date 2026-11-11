@@ -101,11 +101,15 @@ def store(run: RunStore) -> SharedImageStore:
     image_store.close()
 
 
+_worker_init: WorkerInit | None = None
+
+
 @pytest.fixture
 def worker(
     run: RunStore, blocks_dir: Path, snapshot_hash: str, clean_sys_path: None
 ) -> tuple[WorkerInit, queue.Queue[WorkerEvent]]:
     events: queue.Queue[WorkerEvent] = queue.Queue()
+    global _worker_init
     init = WorkerInit(
         event_queue=events,
         blocks_dir=str(blocks_dir),
@@ -113,6 +117,7 @@ def worker(
         block_snapshot_hash=snapshot_hash,
         log_level="DEBUG",
     )
+    _worker_init = init
     init_worker(init, events)
     return init, events
 
@@ -123,6 +128,7 @@ def make_task(
     pipeline: Pipeline,
     experiment_index: int = 0,
     image: Image | None = None,
+    snapshot_hash: str | None = None,
 ) -> ExperimentTask:
     image = image if image is not None else Image(rgb_gradient(8))
     return ExperimentTask(
@@ -138,7 +144,9 @@ def make_task(
         pipeline=pipeline.to_dict(),
         source=store.put(image),
         second=None,
-        block_snapshot_hash="",  # unused by run_experiment; init_worker verifies
+        block_snapshot_hash=(
+            snapshot_hash if snapshot_hash is not None else _worker_init.block_snapshot_hash
+        ),
     )
 
 
