@@ -338,10 +338,18 @@ def test_kill_all_forces_workers_down(
             assert (
                 not psutil.pid_exists(pid) or psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
             )
+        # The crash is reported synchronously by kill_all itself.
+        assert events.crashed.wait(timeout=10)
+        assert events.crashes and all(
+            index in (0, 1) for crash in events.crashes for index in crash
+        )
+
+        # Pending futures resolve to BrokenProcessPool once the broken
+        # executor is shut down.
+        pool.shutdown()
         for future in futures:
             with pytest.raises(BrokenProcessPool):
-                future.result(timeout=30)
-        assert events.crashed.wait(timeout=10)
+                future.result(timeout=10)
     finally:
         pool.shutdown()
 

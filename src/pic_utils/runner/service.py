@@ -166,9 +166,6 @@ class RunService(QObject):
     # --- run thread -------------------------------------------------------
 
     def _run_guarded(self, request: RunRequest) -> None:
-        import faulthandler
-
-        faulthandler.dump_traceback_later(20, exit=True)
         try:
             self._run(request)
         except RunError as error:

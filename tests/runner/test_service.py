@@ -115,10 +115,7 @@ class _Signals:
         self.service.run_failed.connect(self._failed)
 
     def _started(self, run_id: str, total: int) -> None:
-        import sys as _sys
-        import time as _time
 
-        print(f"DBG recv started t={_time.perf_counter():.2f}", file=_sys.__stderr__, flush=True)
         with self.lock:
             self.started.append((run_id, total))
 
@@ -127,18 +124,12 @@ class _Signals:
             self.progress.append((done, total))
 
     def _result(self, record: object) -> None:
-        import sys as _sys
-        import time as _time
 
-        print(f"DBG recv result t={_time.perf_counter():.2f}", file=_sys.__stderr__, flush=True)
         with self.lock:
             self.results.append(record)
 
     def _finished(self, summary: object) -> None:
-        import sys as _sys
-        import time as _time
 
-        print(f"DBG recv finished t={_time.perf_counter():.2f}", file=_sys.__stderr__, flush=True)
         with self.lock:
             self.summary = summary  # type: ignore[assignment]
 
