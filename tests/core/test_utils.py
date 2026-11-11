@@ -7,7 +7,6 @@ helpers, and the logging setup idempotency rules.
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import json
 import logging
@@ -87,12 +86,29 @@ def test_error_hierarchy_relations() -> None:
         assert issubclass(cls, PicUtilsError)
 
 
-def test_errors_are_frozen_dataclasses_where_attributes_are_named() -> None:
+def test_error_attributes_are_named_and_traceback_writable() -> None:
+    # BUG-1 fix: exception dataclasses must NOT be frozen — a frozen
+    # dataclass blocks `exc.__traceback__ = ...`, so any typed exception
+    # crossing a @contextmanager boundary is masked by FrozenInstanceError
+    # (contextlib.py assigns the traceback at Python level).
     error = BlockError(block="segment", step_id="step-2")
     assert error.block == "segment"
     assert error.step_id == "step-2"
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        error.block = "other"  # type: ignore[misc]
+    error.__traceback__ = None  # must not raise
+
+
+def test_error_survives_a_context_manager_boundary() -> None:
+    """BUG-1 regression: the raised type survives a @contextmanager exit."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def boundary():
+        yield
+
+    with pytest.raises(InvalidBlockOutput) as caught, boundary():
+        raise InvalidBlockOutput(block="segment", step_id="step-2")
+    assert caught.value.block == "segment"
+    assert caught.value.__traceback__ is not None
 
 
 def test_image_load_error_attributes() -> None:

@@ -31,6 +31,7 @@ from pic_utils.core.errors import (
     PicUtilsError,
     ProjectFileError,
     RunError,
+    TooManyOutputsError,
     UnsupportedImageError,
     ValidationError,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "PicUtilsError",
     "ProjectFileError",
     "RunError",
+    "TooManyOutputsError",
     "UnsupportedImageError",
     "ValidationError",
     "content_hash",

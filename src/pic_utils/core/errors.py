@@ -35,6 +35,7 @@ __all__ = [
     "PicUtilsError",
     "ProjectFileError",
     "RunError",
+    "TooManyOutputsError",
     "UnsupportedImageError",
     "ValidationError",
 ]
@@ -61,7 +62,7 @@ class PicUtilsError(Exception):
     """Base class for every error raised by Pic Utils code."""
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class ValidationError(PicUtilsError):
     """A pipeline or run configuration failed validation.
 
@@ -79,7 +80,7 @@ class ValidationError(PicUtilsError):
         super().__init__("; ".join(messages) if messages else "validation failed")
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class BlockError(PicUtilsError):
     """A block failed while an experiment ran it (code ``block.raised``).
 
@@ -101,7 +102,7 @@ class BlockError(PicUtilsError):
         super().__init__(self._message())
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class InvalidBlockOutput(BlockError):
     """A block returned output that failed runtime validation.
 
@@ -112,7 +113,18 @@ class InvalidBlockOutput(BlockError):
         return f"block {self.block!r} produced invalid output{self._where()}"
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
+class TooManyOutputsError(BlockError):
+    """A LAYERS block returned more than the maximum number of layers.
+
+    Code: ``block.too_many_outputs`` (§18.2).
+    """
+
+    def _message(self) -> str:
+        return f"block {self.block!r} produced too many outputs{self._where()}"
+
+
+@dataclass(eq=False)
 class ImageLoadError(PicUtilsError):
     """An image could not be loaded.
 
@@ -132,7 +144,7 @@ class ImageLoadError(PicUtilsError):
         super().__init__(self._message())
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class ImageTooLargeError(ImageLoadError):
     """An image exceeds the maximum supported resolution (§4.2).
 
@@ -151,7 +163,7 @@ class ImageTooLargeError(ImageLoadError):
         )
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class UnsupportedImageError(ImageLoadError):
     """The file is an image but its format is not supported (§4.2)."""
 
@@ -175,7 +187,7 @@ class ProjectFileError(PicUtilsError):
     """A project file could not be saved, loaded, or migrated (§17.1)."""
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class RunError(PicUtilsError):
     """A batch run failed with a stable runtime error code (§18.2).
 

@@ -66,20 +66,23 @@ CI: run 42998336536 — success on ubuntu-latest and windows-latest
 
 ## Known issues / follow-ups
 
-- **CC (recommended):** move `BlockSnapshot` and the snapshot-hash payload
-  out of `blocks/registry.py` (which imports Qt) into a Qt-free module so
-  the worker can use the real class instead of the documented structural
-  mirror (`worker.py::_WorkerSnapshot`). Drift fails loud
-  (`block.snapshot_mismatch`), never silent.
-- **BUG-1 (P0-03 file):** frozen-dataclass exceptions in
-  `core/errors.py` cannot have `__traceback__` assigned at Python level, so
-  a typed exception crossing a `@contextmanager` boundary is masked by
-  `dataclasses.FrozenInstanceError`. Suggested fix: drop `frozen=True`
-  from the exception dataclasses (keep `eq=False`).
-- **CC (minor):** `block.too_many_outputs` (§18.2) is unreachable —
-  `execute_pipeline` raises `InvalidBlockOutput` for >16 layers and the
-  worker maps it to `block.invalid_output`. Distinguishing needs a change
-  in `pipeline/execute.py` (P3-03's file).
-- `psutil` ships no `py.typed`; the two `import psutil` lines carry
-  `# type: ignore[import-untyped]` with a reason. Remove both if
-  `types-psutil` is ever approved as a dev dependency.
+All follow-ups below were resolved after the phase tag with the owner's
+explicit approval (CC), committed on `main` after `phase-5`:
+
+- **CC (resolved):** `BlockSnapshot` and the snapshot-hash payload moved
+  from `blocks/registry.py` (Qt) to `blocks/snapshot.py` (Qt-free); the
+  worker uses the real class and the shared `snapshot_hash()` — the
+  structural mirror and the duplicated hash algorithm are gone.
+- **BUG-1 / CC-ERR (resolved):** the exception dataclasses in
+  `core/errors.py` are no longer frozen (a frozen dataclass masked typed
+  exceptions crossing `@contextmanager` boundaries via
+  `FrozenInstanceError`). Regression-tested.
+- **block.too_many_outputs (resolved):** the executor raises
+  `TooManyOutputsError` for >16 layers and the worker maps it to
+  `block.too_many_outputs` (§18.2) instead of the generic
+  `block.invalid_output`.
+- **psutil stubs (kept):** `psutil` ships no `py.typed` and `types-psutil`
+  remains an unapproved dependency; the two documented
+  `# type: ignore[import-untyped]` lines stay.
+- **`RunnerSettings` (unchanged):** the Qt settings wrapper arrives with
+  Phase 6 (P5-01); `RunnerSettings` remains the runner-facing slice.

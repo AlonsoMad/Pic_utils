@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 import numpy as np
 
 from pic_utils.blocks.api import BlockDef, OutputKind, ParamKind
-from pic_utils.core.errors import InvalidBlockOutput
+from pic_utils.core.errors import InvalidBlockOutput, TooManyOutputsError
 from pic_utils.core.image import Image, Layer, Mask
 from pic_utils.pipeline.model import ExperimentSpec, Pipeline, PipelineStep, derive_seed
 
@@ -128,8 +128,14 @@ def _validate_output(
         return
     if not isinstance(result, (list, tuple)):
         _raise_invalid(definition, step, "expected a list or tuple of Layer")
-    if not 1 <= len(result) <= 16:
-        _raise_invalid(definition, step, f"expected 1..16 layers, got {len(result)}")
+    if len(result) > 16:
+        # §18.2: block.too_many_outputs — a distinct code from the generic
+        # invalid-output case, so the UI can name the specific failure.
+        raise TooManyOutputsError(block=definition.name, step_id=step.id) from ValueError(
+            f"expected 1..16 layers, got {len(result)}"
+        )
+    if len(result) < 1:
+        _raise_invalid(definition, step, "expected at least one Layer, got 0")
     for layer in result:
         if not isinstance(layer, Layer):
             _raise_invalid(definition, step, "expected every layer to be a Layer")

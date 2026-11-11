@@ -8,35 +8,33 @@ receives outcomes and events through the queue.
 
 from __future__ import annotations
 
-import hashlib
 import importlib
-import json
 import logging
 import os
 import pkgutil
 import sys
 import time
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 import psutil  # type: ignore[import-untyped]  # psutil ships no py.typed; types-psutil is not an approved dependency
 
 from pic_utils.blocks import builtin as builtin_package
 from pic_utils.blocks.api import BlockDef, BlockLoadError
+from pic_utils.blocks.snapshot import BlockSnapshot, snapshot_hash
 from pic_utils.blocks.userblocks import collect_block_defs, load_user_module
 from pic_utils.core.errors import (
     BLOCK_INVALID_OUTPUT,
     BLOCK_RAISED,
     BLOCK_SNAPSHOT_MISMATCH,
+    BLOCK_TOO_MANY_OUTPUTS,
     IO_WRITE,
     MEMORY_LIMIT,
     BlockError,
     ExportError,
     InvalidBlockOutput,
     RunError,
+    TooManyOutputsError,
 )
 from pic_utils.core.paths import content_hash
 from pic_utils.io.saver import save_image
@@ -61,43 +59,11 @@ logger = logging.getLogger(__name__)
 _THUMB_LONG_SIDE = 256
 _MIB = 1024 * 1024
 
-if TYPE_CHECKING:
-    # blocks/registry.py imports Qt; the type reference is compile-time only.
-    from pic_utils.blocks.registry import BlockSnapshot
-
-
-_worker_snapshot: _WorkerSnapshot | None = None
+_worker_snapshot: BlockSnapshot | None = None
 _worker_snapshot_hash: str = ""
 _worker_snapshot_errors: tuple[BlockLoadError, ...] = ()
 _worker_events: EventQueue | None = None
 _worker_pid: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class _WorkerSnapshot:
-    """Structural mirror of ``BlockSnapshot`` (registry.py imports Qt).
-
-    Kept field-for-field with ``BlockRegistry._snapshot_hash`` so the worker
-    can verify the run's hash without a Qt import. If ``BlockSnapshot``
-    changes shape, this mirror and the hash payload must change with it —
-    the failure mode is a loud ``block.snapshot_mismatch`` on every run,
-    never a silent mismatch.
-    """
-
-    defs: Mapping[str, BlockDef]
-    hash: str
-
-    def get(self, name: str) -> BlockDef:
-        return self.defs[name]
-
-    def __contains__(self, name: object) -> bool:
-        return name in self.defs
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.defs)
-
-    def __len__(self) -> int:
-        return len(self.defs)
 
 
 class _QueueLogHandler(logging.Handler):
@@ -205,36 +171,32 @@ def _set_snapshot(expected_hash: str, blocks_dir: Path | None) -> None:
                     continue
                 definitions[definition.name] = definition
 
-    # Mirror of BlockRegistry._snapshot_hash (P2-02): the worker must compute
-    # the identical hash without importing the registry (Qt). If the two
-    # drift, every run fails with block.snapshot_mismatch — loud, not silent.
-    builtin_entries = sorted(
-        (definition.name, definition.content_hash, definition.api_version)
-        for definition in definitions.values()
-        if definition.source is None
-    )
-    user_entries: list[tuple[str, str]] = []
+    # Same hash function as the registry (§5.4): the run's hash is
+    # reproducible on both sides by construction, not by mirrored code.
+    file_hashes: dict[Path, str] = {}
     if blocks_dir is not None and blocks_dir.is_dir():
-        # hash_user_files (§5.5) hashes every *.py under the folder via rglob,
-        # excluding only __pycache__; native separators match the registry.
-        user_entries = sorted(
-            (str(path.relative_to(blocks_dir)), content_hash(path))
-            for path in blocks_dir.rglob("*.py")
-            if "__pycache__" not in path.parts
-        )
-    payload = json.dumps(
-        {"builtins": builtin_entries, "user": user_entries},
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        # hash_user_files (§5.5) semantics: every *.py under the folder via
+        # rglob, excluding only __pycache__.
+        for path in blocks_dir.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                file_hashes[path] = content_hash(path)
+            except OSError as error:
+                errors.append(
+                    BlockLoadError(
+                        reason=f"cannot hash user block: {error}",
+                        path=path,
+                    )
+                )
+    digest = snapshot_hash(definitions, file_hashes, user_blocks_dir=blocks_dir)
 
     _worker_snapshot_hash = digest
     _worker_snapshot_errors = tuple(errors)
     if expected_hash and digest != expected_hash:
         _worker_snapshot = None
         return
-    _worker_snapshot = _WorkerSnapshot(defs=MappingProxyType(definitions), hash=digest)
+    _worker_snapshot = BlockSnapshot(defs=MappingProxyType(definitions), hash=digest)
 
 
 def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
@@ -265,13 +227,9 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
             raise RunError(code=BLOCK_SNAPSHOT_MISMATCH)
         source = attach_image(task.source)
         second = attach_image(task.second) if task.second is not None else None
-        # _WorkerSnapshot mirrors BlockSnapshot field-for-field; the real
-        # class lives in blocks/registry.py, which imports Qt and therefore
-        # cannot be imported here (§1.3: worker code must not import Qt).
-        snapshot: BlockSnapshot = _worker_snapshot  # type: ignore[assignment]
         # §8.6: a worker aborts with memory.limit when the OS has less
         # available memory than the experiment's estimate.
-        estimate_mb = MemoryGuard().estimate_experiment_mb(source, pipeline, snapshot)
+        estimate_mb = MemoryGuard().estimate_experiment_mb(source, pipeline, _worker_snapshot)
         available = psutil.virtual_memory().available
         if available < estimate_mb * _MIB:
             logger.warning(
@@ -291,7 +249,7 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
                 elapsed_ms=_elapsed_ms(started),
                 results=(),
             )
-        output = execute_pipeline(pipeline, snapshot, source, second, task.experiment)
+        output = execute_pipeline(pipeline, _worker_snapshot, source, second, task.experiment)
         results: list[ResultFile] = []
         for layer_index, layer in enumerate(output.layers):
             result_path = store.result_file(task.experiment.index, layer_index)
@@ -313,6 +271,17 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
             experiment_index=task.experiment.index,
             status="failed",
             error_code=BLOCK_INVALID_OUTPUT,
+            error_message=str(error),
+            elapsed_ms=_elapsed_ms(started),
+            results=(),
+        )
+    except TooManyOutputsError as error:
+        # §18.2: a LAYERS block returning more than 16 layers.
+        logger.exception("experiment %s failed: too many outputs", task.experiment.index)
+        return ExperimentOutcome(
+            experiment_index=task.experiment.index,
+            status="failed",
+            error_code=BLOCK_TOO_MANY_OUTPUTS,
             error_message=str(error),
             elapsed_ms=_elapsed_ms(started),
             results=(),

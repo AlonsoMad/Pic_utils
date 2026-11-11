@@ -8,13 +8,11 @@ swaps an immutable snapshot atomically and emits ``changed``.
 
 from __future__ import annotations
 
-import hashlib
 import importlib
-import json
 import pkgutil
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -24,28 +22,9 @@ from PySide6.QtCore import QObject, Signal
 from pic_utils.blocks import builtin as builtin_package
 from pic_utils.blocks import userblocks
 from pic_utils.blocks.api import BlockDef, BlockLoadError
+from pic_utils.blocks.snapshot import BlockSnapshot, snapshot_hash
 
 __all__ = ["BlockRegistry", "BlockSnapshot", "ReloadReport"]
-
-
-@dataclass(frozen=True, slots=True)
-class BlockSnapshot:
-    """An immutable view of the blocks a run binds to."""
-
-    defs: Mapping[str, BlockDef]
-    hash: str
-
-    def get(self, name: str) -> BlockDef:
-        return self.defs[name]
-
-    def __contains__(self, name: object) -> bool:
-        return name in self.defs
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.defs)
-
-    def __len__(self) -> int:
-        return len(self.defs)
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,21 +212,8 @@ class BlockRegistry(QObject):
         definitions: Mapping[str, BlockDef],
         file_hashes: Mapping[Path, str],
     ) -> str:
-        builtin_entries = sorted(
-            (definition.name, definition.content_hash, definition.api_version)
-            for definition in definitions.values()
-            if definition.source is None
+        return snapshot_hash(
+            definitions,
+            file_hashes,
+            user_blocks_dir=self._user_blocks_dir,
         )
-        folder = self._user_blocks_dir
-        if folder is None:
-            user_entries: list[tuple[str, str]] = []
-        else:
-            user_entries = sorted(
-                (str(path.relative_to(folder)), digest) for path, digest in file_hashes.items()
-            )
-        payload = json.dumps(
-            {"builtins": builtin_entries, "user": user_entries},
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()

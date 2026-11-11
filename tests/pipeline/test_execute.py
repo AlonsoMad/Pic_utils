@@ -14,7 +14,7 @@ from pic_utils.blocks.builtin.channels import channel_permute, permutation_grid
 from pic_utils.blocks.builtin.compose import conditional_overlay, overlay
 from pic_utils.blocks.builtin.masks import channel_mask
 from pic_utils.blocks.registry import BlockRegistry, BlockSnapshot
-from pic_utils.core.errors import InvalidBlockOutput
+from pic_utils.core.errors import InvalidBlockOutput, TooManyOutputsError
 from pic_utils.core.image import Image, Layer, Mask
 from pic_utils.pipeline.execute import PipelineOutput, execute_pipeline
 from pic_utils.pipeline.model import ExperimentSpec, Pipeline, PipelineStep, derive_seed
@@ -413,5 +413,7 @@ def test_invalid_layer_items() -> None:
 
 def test_too_many_layers() -> None:
     pipeline = Pipeline(steps=(PipelineStep(id="a", block="too_many_layers"),))
-    with pytest.raises(InvalidBlockOutput):
+    # §18.2: more than 16 layers is its own code (block.too_many_outputs),
+    # distinct from the generic invalid-output case.
+    with pytest.raises(TooManyOutputsError):
         execute_pipeline(pipeline, SNAPSHOT, source_rgb(), None, experiment())
