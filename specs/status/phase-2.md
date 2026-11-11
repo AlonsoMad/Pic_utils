@@ -35,6 +35,9 @@ $ uv run pytest
 135 passed in 0.52s
 ```
 
+CI: GitHub Actions run `42971155787` on `main` completed successfully
+(`ubuntu-latest` 27s, `windows-latest` 35s; Python 3.12).
+
 Boundary checks:
 
 ```
@@ -71,6 +74,7 @@ $ grep -R -E "^(from PIL|import PIL)" src/pic_utils/core/
 - [x] No BGR outside `core/color.py` in the new `core/` + `io/` code; no
       Pillow import in `core/`.
 - [x] `pytest tests/core tests/io` green; mypy clean.
+- [x] CI green on Linux and Windows.
 - [x] `specs/status/phase-2.md` written; tag `phase-2` created.
 
 ## Known issues / follow-ups
@@ -92,3 +96,6 @@ $ grep -R -E "^(from PIL|import PIL)" src/pic_utils/core/
 - Task branches were not used: workspace policy blocks `git switch`.
   Each task was committed on `main` after its own gate run, matching the
   P0-03 precedent.
+- The `phase-2` tag was created at `57ab030` immediately after the local
+  gates passed; this CI evidence was appended in a follow-up commit. The
+  tag target is the gated code tree, and CI passed on it.
