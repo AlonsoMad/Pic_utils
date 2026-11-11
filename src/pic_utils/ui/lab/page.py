@@ -49,8 +49,8 @@ class LabPage(QWidget):
         self._editor = PipelineEditorPanel(PipelineModel(self._registry.snapshot, self), self)
         self._preview = PreviewPane(
             lambda: (
-                str(self._registry.user_blocks_dir)
-                if self._registry.user_blocks_dir is not None
+                str(folder)
+                if (folder := self._registry.user_blocks_dir) is not None and folder.is_dir()
                 else None
             ),
             debounce_ms=self._settings.debounce_ms,
@@ -204,6 +204,7 @@ class LabPage(QWidget):
             ),
             user_blocks_dir=self._registry.user_blocks_dir,
         )
+        self._service.start(request)
         self.launch_requested.emit(request)
 
     def _on_run_started(self, run_id: str, _total: int) -> None:
