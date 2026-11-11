@@ -62,7 +62,8 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._lab_page)
         self._stack.addWidget(self._canvas_page)
 
-        # Lab glue: project open, blocks reload, run progress (P5-10).
+        # Language glue: every switch re-resolves the whole window (AC-12).
+        languages.language_changed.connect(self.retranslate)
         self.project_open_requested.connect(self._lab_page.open_project)
         self.blocks_reload_requested.connect(self._lab_page.library().reload_now)
         self._lab_page.notify.connect(self.statusBar().showMessage)
@@ -310,5 +311,7 @@ class MainWindow(QMainWindow):
         self._reload_blocks.setText(self.tr("&Reload blocks"))
         self._settings_action.setText(self.tr("Se&ttings…"))
         self._copy_diagnostics.setText(self.tr("&Copy diagnostics"))
-        retranslate_tree(self._lab_page)
-        retranslate_tree(self._canvas_page)
+        self._lab_page.retranslate()
+        self._canvas_page.retranslate()
+        # Run controls are re-parented into the top bar, not under the lab page.
+        retranslate_tree(self._run_controls_host)

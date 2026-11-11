@@ -32,7 +32,9 @@ from pic_utils.ui.i18n import LanguageManager
 __all__ = ["SettingsDialog"]
 
 
-def _browse_row(line: QLineEdit, parent: QDialog, title: str) -> QWidget:
+def _browse_row(
+    line: QLineEdit, parent: QDialog, title: str
+) -> tuple[QWidget, QPushButton]:
     row = QWidget(parent)
     layout = QHBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -40,7 +42,7 @@ def _browse_row(line: QLineEdit, parent: QDialog, title: str) -> QWidget:
     button = QPushButton(parent.tr("Browse…"))
     layout.addWidget(button)
     button.clicked.connect(lambda: _pick_folder(line, parent, title))
-    return row
+    return row, button
 
 
 def _pick_folder(line: QLineEdit, parent: QDialog, title: str) -> None:
@@ -102,6 +104,9 @@ class SettingsDialog(QDialog):
         self._log_level.addItems(list(LOG_LEVELS))
         self._log_level.setCurrentText(settings.log_level)
 
+        self._labels: dict[str, QLabel] = {}
+        self._browse_buttons: dict[str, QPushButton] = {}
+
         form = QFormLayout()
         language_row = QWidget(self)
         language_layout = QHBoxLayout(language_row)
@@ -110,47 +115,38 @@ class SettingsDialog(QDialog):
         note = QLabel()
         language_layout.addWidget(note)
         self._language_note = note
-        form.addRow(self._label_row(self.tr("&Language"), self._language), language_row)
-        form.addRow(self._label_row(self.tr("&Theme"), self._theme), self._theme)
-        form.addRow(
-            self.tr("&Blocks folder"),
-            _browse_row(self._blocks_folder, self, self.tr("Blocks folder")),
+        form.addRow(self._row("language", self._language), language_row)
+        form.addRow(self._row("theme", self._theme), self._theme)
+        blocks_row, blocks_button = _browse_row(
+            self._blocks_folder, self, self.tr("Blocks folder")
         )
-        form.addRow(
-            self.tr("&Results root"),
-            _browse_row(self._results_root, self, self.tr("Results root")),
+        self._browse_buttons["blocks_folder"] = blocks_button
+        form.addRow(self._row("blocks_folder", blocks_row), blocks_row)
+        results_row, results_button = _browse_row(
+            self._results_root, self, self.tr("Results root")
         )
+        self._browse_buttons["results_root"] = results_button
+        form.addRow(self._row("results_root", results_row), results_row)
 
         runner_form = QFormLayout()
-        runner_form.addRow(self._label_row(self.tr("&Workers"), self._workers), self._workers)
-        runner_form.addRow(
-            self._label_row(self.tr("&Memory ceiling (MB)"), self._memory_ceiling),
-            self._memory_ceiling,
-        )
-        runner_form.addRow(
-            self._label_row(self.tr("Experiment &timeout (s)"), self._timeout), self._timeout
-        )
-        runner_form.addRow(self.tr("Auto-reload &blocks"), self._auto_reload)
-        runner_box = QGroupBox(self.tr("Runner"))
-        runner_box.setLayout(runner_form)
+        runner_form.addRow(self._row("workers", self._workers), self._workers)
+        runner_form.addRow(self._row("memory_ceiling", self._memory_ceiling), self._memory_ceiling)
+        runner_form.addRow(self._row("timeout", self._timeout), self._timeout)
+        runner_form.addRow(self._row("auto_reload", self._auto_reload), self._auto_reload)
+        self._runner_box = QGroupBox(self.tr("Runner"), self)
+        self._runner_box.setLayout(runner_form)
 
         preview_form = QFormLayout()
-        preview_form.addRow(self._label_row(self.tr("Proxy long &side"), self._proxy), self._proxy)
-        preview_form.addRow(
-            self._label_row(self.tr("&Debounce (ms)"), self._debounce), self._debounce
-        )
-        preview_box = QGroupBox(self.tr("Preview"))
-        preview_box.setLayout(preview_form)
+        preview_form.addRow(self._row("proxy", self._proxy), self._proxy)
+        preview_form.addRow(self._row("debounce", self._debounce), self._debounce)
+        self._preview_box = QGroupBox(self.tr("Preview"), self)
+        self._preview_box.setLayout(preview_form)
 
         general_form = QFormLayout()
-        general_form.addRow(
-            self._label_row(self.tr("&Undo limit"), self._undo_limit), self._undo_limit
-        )
-        general_form.addRow(
-            self._label_row(self.tr("&Log level"), self._log_level), self._log_level
-        )
-        general_box = QGroupBox(self.tr("General"))
-        general_box.setLayout(general_form)
+        general_form.addRow(self._row("undo_limit", self._undo_limit), self._undo_limit)
+        general_form.addRow(self._row("log_level", self._log_level), self._log_level)
+        self._general_box = QGroupBox(self.tr("General"), self)
+        self._general_box.setLayout(general_form)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -160,23 +156,41 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addWidget(runner_box)
-        layout.addWidget(preview_box)
-        layout.addWidget(general_box)
+        layout.addWidget(self._runner_box)
+        layout.addWidget(self._preview_box)
+        layout.addWidget(self._general_box)
         layout.addWidget(buttons)
 
         self._language.currentTextChanged.connect(self._apply_language)
+        languages.language_changed.connect(self.retranslate)
         self.retranslate()
 
-    @staticmethod
-    def _label_row(text: str, buddy: QWidget) -> QLabel:
-        label = QLabel(text)
+    def _row(self, key: str, buddy: QWidget) -> QLabel:
+        label = QLabel(self)
         label.setBuddy(buddy)
+        self._labels[key] = label
         return label
 
     def retranslate(self) -> None:
         """Set every user-visible string (§15)."""
         self.setWindowTitle(self.tr("Settings"))
+        self._labels["language"].setText(self.tr("&Language"))
+        self._labels["theme"].setText(self.tr("&Theme"))
+        self._labels["blocks_folder"].setText(self.tr("&Blocks folder"))
+        self._labels["results_root"].setText(self.tr("&Results root"))
+        self._labels["workers"].setText(self.tr("&Workers"))
+        self._labels["memory_ceiling"].setText(self.tr("&Memory ceiling (MB)"))
+        self._labels["timeout"].setText(self.tr("Experiment &timeout (s)"))
+        self._labels["auto_reload"].setText(self.tr("Auto-reload &blocks"))
+        self._labels["proxy"].setText(self.tr("Proxy long &side"))
+        self._labels["debounce"].setText(self.tr("&Debounce (ms)"))
+        self._labels["undo_limit"].setText(self.tr("&Undo limit"))
+        self._labels["log_level"].setText(self.tr("&Log level"))
+        self._runner_box.setTitle(self.tr("Runner"))
+        self._preview_box.setTitle(self.tr("Preview"))
+        self._general_box.setTitle(self.tr("General"))
+        for button in self._browse_buttons.values():
+            button.setText(self.tr("Browse…"))
         self._language_note.setText(self.tr("applies immediately"))
         self._auto_reload.setText(self.tr("enabled"))
 
@@ -186,9 +200,7 @@ class SettingsDialog(QDialog):
         """Live-apply the language so the user sees the effect (AC-12)."""
         self._settings.set_language(value)
         self._languages.set_language(value)
-        retranslate = getattr(self.parent(), "retranslate", None)
-        if callable(retranslate):
-            retranslate()
+        self.retranslate()
 
     def accept(self) -> None:
         """Write every edited key (except language, already applied)."""
