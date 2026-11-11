@@ -1,0 +1,240 @@
+"""Application shell: mode switch, top bar, menus, status bar (§13.1).
+
+The window hosts the Lab and Canvas pages in a ``QStackedWidget``. Run
+controls (Lab mode only) and the progress bar live in the top bar; drag and
+drop on the window adds image sources and opens project/canvas files.
+"""
+
+from __future__ import annotations
+
+import platform
+from pathlib import Path
+
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QProgressBar,
+    QStackedWidget,
+    QStatusBar,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from pic_utils import __version__
+from pic_utils.settings import Settings, logs_dir
+from pic_utils.ui.canvas.page import CanvasPage
+from pic_utils.ui.dialogs.settings_dialog import SettingsDialog
+from pic_utils.ui.i18n import LanguageManager, retranslate_tree
+from pic_utils.ui.lab.page import LabPage
+
+__all__ = ["MainWindow", "PROJECT_SUFFIX", "CANVAS_SUFFIX", "IMAGE_SUFFIXES"]
+
+PROJECT_SUFFIX = ".puproject"
+CANVAS_SUFFIX = ".pucanvas"
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+
+
+class MainWindow(QMainWindow):
+    """Single window with a Lab mode and a Canvas mode (FR-UI-01)."""
+
+    sources_dropped = Signal(list)  # list[Path]
+    project_open_requested = Signal(Path)
+    canvas_open_requested = Signal(Path)
+    blocks_reload_requested = Signal()
+
+    def __init__(
+        self,
+        settings: Settings,
+        languages: LanguageManager,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._settings = settings
+        self._languages = languages
+
+        self._lab_page = LabPage()
+        self._canvas_page = CanvasPage()
+        self._stack = QStackedWidget(self)
+        self._stack.addWidget(self._lab_page)
+        self._stack.addWidget(self._canvas_page)
+
+        self._progress = QProgressBar(self)
+        self._progress.hide()
+        self._run_status = QLabel(self)
+
+        central = QWidget(self)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._build_top_bar(central))
+        layout.addWidget(self._stack)
+
+        self.setCentralWidget(central)
+        self.setAcceptDrops(True)
+        self.setStatusBar(QStatusBar(self))
+        self.statusBar().addWidget(self._run_status)
+        self.statusBar().addPermanentWidget(self._memory_label())
+
+        self._build_menus()
+        self.retranslate()
+
+    # --- construction helpers ------------------------------------------------
+
+    def _build_top_bar(self, parent: QWidget) -> QToolBar:
+        bar = QToolBar(parent)
+        bar.setMovable(False)
+        self._mode_lab = QAction(parent)
+        self._mode_lab.setCheckable(True)
+        self._mode_canvas = QAction(parent)
+        self._mode_canvas.setCheckable(True)
+        self._run_controls_host = QWidget(parent)
+        host_layout = QHBoxLayout(self._run_controls_host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        bar.addWidget(self._run_controls_host)
+        bar.addSeparator()
+        bar.addWidget(self._progress)
+        return bar
+
+    def _build_menus(self) -> None:
+        menu_bar = self.menuBar()
+        self._file_menu = QMenu(menu_bar)
+        self._tools_menu = QMenu(menu_bar)
+        self._help_menu = QMenu(menu_bar)
+        menu_bar.addMenu(self._file_menu)
+        menu_bar.addMenu(self._tools_menu)
+        menu_bar.addMenu(self._help_menu)
+
+        self._open_project = QAction(self._file_menu)
+        self._open_project.setShortcut(QKeySequence.StandardKey.Open)
+        self._open_project.triggered.connect(self._open_project_dialog)
+        self._file_menu.addAction(self._open_project)
+
+        self._reload_blocks = QAction(self._tools_menu)
+        self._reload_blocks.triggered.connect(self._reload_blocks_slot)
+        self._tools_menu.addAction(self._reload_blocks)
+
+        self._settings_action = QAction(self._tools_menu)
+        self._settings_action.setShortcut(QKeySequence("Ctrl+,"))
+        self._settings_action.triggered.connect(self._open_settings)
+        self._tools_menu.addAction(self._settings_action)
+
+        self._copy_diagnostics = QAction(self._help_menu)
+        self._copy_diagnostics.triggered.connect(self._copy_diagnostics_slot)
+        self._help_menu.addAction(self._copy_diagnostics)
+
+        mode_group = QActionGroup(self)
+        mode_group.addAction(self._mode_lab)
+        mode_group.addAction(self._mode_canvas)
+        mode_group.setExclusive(True)
+        self._mode_lab.setChecked(True)
+        mode_group.triggered.connect(self._switch_mode)
+
+    def _memory_label(self) -> QLabel:
+        return QLabel(self)
+
+    # --- mode switching -------------------------------------------------------
+
+    def _switch_mode(self, action: QAction) -> None:
+        """Switch the stacked page; the mode switch is the source of truth."""
+        if action is self._mode_lab:
+            self._stack.setCurrentWidget(self._lab_page)
+        else:
+            self._stack.setCurrentWidget(self._canvas_page)
+
+    # --- injected panels (stable layout API) -----------------------------------
+
+    def set_run_controls(self, widget: QWidget) -> None:
+        """Place the Lab run-controls strip in the top bar (P5-10)."""
+        layout = self._run_controls_host.layout()
+        assert layout is not None
+        layout.addWidget(widget)
+
+    # --- dialogs and actions -----------------------------------------------------
+
+    def _open_project_dialog(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            self.tr("Open project"),
+            "",
+            self.tr("Pic Utils project (*.puproject)"),
+        )
+        if path:
+            self.project_open_requested.emit(Path(path))
+
+    def _open_settings(self) -> None:
+        dialog = SettingsDialog(self._settings, self._languages, self)
+        dialog.exec()
+
+    def _reload_blocks_slot(self) -> None:
+        self.blocks_reload_requested.emit()
+
+    def _copy_diagnostics_slot(self) -> None:
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(self.diagnostics_text())
+
+    def diagnostics_text(self) -> str:
+        """App version, platform, and dependency versions for bug reports."""
+        return "\n".join(
+            [
+                f"Pic Utils {__version__}",
+                f"Python {platform.python_version()} on {platform.platform()}",
+                f"Qt {QApplication.instance().property('qt_version') if QApplication.instance() else '?'}",
+                f"Log: {logs_dir() / 'app.log'}",
+            ]
+        )
+
+    # --- status and progress ---------------------------------------------------------
+
+    def show_progress(self, done: int, total: int) -> None:
+        """Update the run progress bar; hidden when idle."""
+        self._progress.setRange(0, max(total, 1))
+        self._progress.setValue(done)
+        self._progress.show()
+
+    def clear_progress(self) -> None:
+        self._progress.hide()
+
+    def set_run_status(self, text: str) -> None:
+        self._run_status.setText(text)
+
+    # --- drag and drop -----------------------------------------------------------------
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        for url in event.mimeData().urls():
+            path = Path(url.toLocalFile())
+            if path.suffix.lower() in IMAGE_SUFFIXES:
+                self.sources_dropped.emit([path])
+            elif path.suffix == PROJECT_SUFFIX:
+                self.project_open_requested.emit(path)
+            elif path.suffix == CANVAS_SUFFIX:
+                self.canvas_open_requested.emit(path)
+        event.acceptProposedAction()
+
+    # --- retranslation ------------------------------------------------------------------
+
+    def retranslate(self) -> None:
+        """Set every user-visible string (§15)."""
+        self.setWindowTitle(self.tr("Pic Utils"))
+        self._mode_lab.setText(self.tr("Lab"))
+        self._mode_canvas.setText(self.tr("Canvas"))
+        self._file_menu.setTitle(self.tr("&File"))
+        self._tools_menu.setTitle(self.tr("&Tools"))
+        self._help_menu.setTitle(self.tr("&Help"))
+        self._open_project.setText(self.tr("&Open project…"))
+        self._reload_blocks.setText(self.tr("&Reload blocks"))
+        self._settings_action.setText(self.tr("Se&ttings…"))
+        self._copy_diagnostics.setText(self.tr("&Copy diagnostics"))
+        retranslate_tree(self._lab_page)
+        retranslate_tree(self._canvas_page)
