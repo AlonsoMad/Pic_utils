@@ -248,7 +248,13 @@ class LabPage(QWidget):
 
     def open_project(self, path: Path) -> None:
         """Load a project file; missing files open the relink dialog."""
-        data = self._project_actions.load(path, self)
+        from pic_utils.ui.lab.project_actions import ProjectFileError
+
+        try:
+            data = self._project_actions.load(path, self)
+        except ProjectFileError as error:
+            self.notify.emit(str(error))
+            return
         if data is not None:
             self.load_project_data(data)
 

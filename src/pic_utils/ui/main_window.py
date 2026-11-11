@@ -67,7 +67,6 @@ class MainWindow(QMainWindow):
         self.blocks_reload_requested.connect(self._lab_page.library().reload_now)
         self._lab_page.notify.connect(self.statusBar().showMessage)
         self._lab_page.launch_requested.connect(self._on_launch_requested)
-        self.set_run_controls(self._lab_page.run_controls())
 
         self._progress = QProgressBar(self)
         self._progress.hide()
@@ -79,6 +78,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
         layout.addWidget(self._build_top_bar(central))
         layout.addWidget(self._stack)
+        self.set_run_controls(self._lab_page.run_controls())
 
         self.setCentralWidget(central)
         self.setAcceptDrops(True)
