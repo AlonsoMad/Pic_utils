@@ -162,7 +162,7 @@ def test_block_def_is_immutable() -> None:
 def test_block_load_error_is_a_pic_utils_error() -> None:
     error = BlockLoadError(reason="bad signature", path=Path("blocks/bad.py"), block="bad")
     assert isinstance(error, PicUtilsError)
-    assert "blocks/bad.py" in str(error)
+    assert str(Path("blocks/bad.py")) in str(error)
     assert "bad" in str(error)
     assert "bad signature" in str(error)
 
