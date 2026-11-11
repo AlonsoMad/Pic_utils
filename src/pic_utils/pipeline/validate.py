@@ -112,6 +112,8 @@ def validate_pipeline(
         )
         return issues
 
+    # First occurrence wins: a duplicate id is flagged below, so resolution
+    # only has to be deterministic, not exhaustive.
     index_by_id: dict[str, int] = {}
     for index, step in enumerate(pipeline.steps):
         if step.id in index_by_id:

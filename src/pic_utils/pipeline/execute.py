@@ -85,6 +85,8 @@ def _arguments(
 
 
 def _resolve_seed(step: PipelineStep, param_name: str, experiment: ExperimentSpec) -> int:
+    # An explicit None here means "not overridden" (the planner never emits
+    # None), so it falls through to the pipeline value and then the default.
     explicit = experiment.params.get(step.id, {}).get(param_name)
     if explicit is None:
         explicit = step.params.get(param_name)

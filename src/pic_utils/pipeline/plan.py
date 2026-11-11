@@ -54,7 +54,8 @@ def build_plan(
     """
     if source_count < 1:
         return []
-    total = _expected_count(config, source_count)
+    combos = _combinations(config.axes)
+    total = _expected_count(config, combos, source_count)
     if total > MAX_EXPERIMENTS:
         raise ValidationError(
             [
@@ -66,20 +67,21 @@ def build_plan(
             ]
         )
     if config.mode == "grid":
-        return _grid_plan(config, source_count)
+        return _grid_plan(config, combos, source_count)
     if config.mode == "random":
         return _random_plan(config, pipeline, snapshot, source_count)
     if config.mode == "hybrid":
-        return _hybrid_plan(config, pipeline, snapshot, source_count)
+        return _hybrid_plan(config, pipeline, snapshot, combos, source_count)
     raise ValueError(f"unknown run mode {config.mode!r}")
 
 
-def _grid_plan(config: RunConfig, source_count: int) -> list[ExperimentSpec]:
-    combinations = _combinations(config.axes)
+def _grid_plan(
+    config: RunConfig, combos: list[tuple[Any, ...]], source_count: int
+) -> list[ExperimentSpec]:
     specs: list[ExperimentSpec] = []
     index = 0
     for source_index in range(source_count):
-        for combination in combinations:
+        for combination in combos:
             params = _axis_values(config.axes, combination)
             specs.append(_experiment(index, source_index, params, config))
             index += 1
@@ -103,13 +105,13 @@ def _hybrid_plan(
     config: RunConfig,
     pipeline: Pipeline,
     snapshot: BlockSnapshot,
+    combos: list[tuple[Any, ...]],
     source_count: int,
 ) -> list[ExperimentSpec]:
-    combinations = _combinations(config.axes)
     specs: list[ExperimentSpec] = []
     index = 0
     for source_index in range(source_count):
-        for combination in combinations:
+        for combination in combos:
             base = _axis_values(config.axes, combination)
             for _ in range(config.random_samples):
                 params = _sampled_values(config, pipeline, snapshot, index, base)
@@ -175,10 +177,9 @@ def _experiment(
     )
 
 
-def _expected_count(config: RunConfig, source_count: int) -> int:
-    product = 1
-    for axis in config.axes:
-        product *= len(axis.values)
+def _expected_count(config: RunConfig, combos: list[tuple[Any, ...]], source_count: int) -> int:
+    """Total experiments for ``config``; ``combos`` is the enumerated axis product."""
+    product = len(combos)
     if config.mode == "grid":
         return product * source_count
     if config.mode == "random":
