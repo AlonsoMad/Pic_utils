@@ -155,6 +155,24 @@ class TestGroups:
         assert doc.groups == {}
         assert all(item.group_id is None for item in doc.layers)
 
+    def test_set_layer_group_same_group_is_a_noop(self, store: AssetStore) -> None:
+        doc = CanvasDoc(assets_dir=store.assets_dir)
+        doc.add_layer(layer(store, "a"))
+        doc.add_layer(layer(store, "b"))
+        group = doc.group_layers(["a", "b"])
+        order = [item.id for item in doc.layers]
+        doc.set_layer_group("a", group.id)
+        assert [item.id for item in doc.layers] == order
+
+    def test_removing_last_member_drops_empty_group(self, store: AssetStore) -> None:
+        doc = CanvasDoc(assets_dir=store.assets_dir)
+        doc.add_layer(layer(store, "a"))
+        doc.add_layer(layer(store, "b"))
+        group = doc.group_layers(["a", "b"])
+        doc.set_layer_group("a", None)
+        doc.set_layer_group("b", None)
+        assert group.id not in doc.groups
+
     def test_group_needs_a_layer(self, store: AssetStore) -> None:
         doc = CanvasDoc(assets_dir=store.assets_dir)
         with pytest.raises(ValueError, match="at least one"):
@@ -223,6 +241,15 @@ class TestPersistence:
         path = tmp_path / "bad.canvas"
         path.write_text(json.dumps({"format": "other"}), encoding="utf-8")
         with pytest.raises(CanvasFileError, match="format"):
+            load_canvas(path)
+
+    def test_zero_version_rejected(self, tmp_path: Path) -> None:
+        path = tmp_path / "v0.canvas"
+        path.write_text(
+            json.dumps({"format": CANVAS_FORMAT, "version": 0}),
+            encoding="utf-8",
+        )
+        with pytest.raises(CanvasFileError, match="version"):
             load_canvas(path)
 
     def test_newer_version_rejected(self, tmp_path: Path) -> None:

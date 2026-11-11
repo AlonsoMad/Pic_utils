@@ -69,12 +69,14 @@ class AddLayerCommand(QUndoCommand):
         self._layer = layer
         self._natural_size = natural_size
         self._index = index
+        self._old_size = doc.size
 
     def redo(self) -> None:
         self._doc.add_layer(self._layer, natural_size=self._natural_size, index=self._index)
 
     def undo(self) -> None:
         self._doc.remove_layer(self._layer.id)
+        self._doc.size = self._old_size
 
     def text(self) -> str:
         return f"add layer {self._layer.name}"
@@ -96,6 +98,15 @@ class RemoveLayerCommand(QUndoCommand):
     def undo(self) -> None:
         if self._layer is not None and self._index is not None:
             self._doc.add_layer(self._layer, index=self._index)
+
+    def referenced_assets(self) -> set[str]:
+        """Assets this command can restore to the document."""
+        if self._layer is None:
+            return set()
+        references = {self._layer.image_ref}
+        if self._layer.mask_ref is not None:
+            references.add(self._layer.mask_ref)
+        return references
 
     def text(self) -> str:
         return f"remove layer {self._layer_id}"
@@ -142,10 +153,20 @@ class TransformLayerCommand(QUndoCommand):
     def id(self) -> int:
         return hash((TransformLayerCommand, self._layer_id)) & 0x7FFFFFFF
 
+    def _changed_fields(self) -> tuple[bool, bool, bool, bool]:
+        return (
+            self._old[0] != self._new[0],
+            self._old[1] != self._new[1],
+            self._old[2] != self._new[2],
+            self._old[3] != self._new[3],
+        )
+
     def mergeWith(self, other: QUndoCommand) -> bool:
         if not isinstance(other, TransformLayerCommand):
             return False
         if other._layer_id != self._layer_id:
+            return False
+        if self._changed_fields() != other._changed_fields():
             return False
         self._new = other._new
         return True
@@ -256,6 +277,7 @@ class SetLayerGroupCommand(QUndoCommand):
         self._layer_id = layer_id
         self._new = group_id
         self._old = doc.layer(layer_id).group_id
+        self._old_groups = dict(doc.groups)
         self._old_order = [layer.id for layer in doc.layers]
         self._old_assignments = {layer.id: layer.group_id for layer in doc.layers}
 
@@ -263,6 +285,8 @@ class SetLayerGroupCommand(QUndoCommand):
         self._doc.set_layer_group(self._layer_id, self._new)
 
     def undo(self) -> None:
+        self._doc.groups.clear()
+        self._doc.groups.update(self._old_groups)
         for layer in self._doc.layers:
             layer.group_id = self._old_assignments.get(layer.id)
         _reorder(self._doc, self._old_order)
@@ -289,6 +313,10 @@ class ApplyMaskCommand(QUndoCommand):
     def undo(self) -> None:
         self._doc.layer(self._layer_id).mask_ref = self._old
         self._doc.dirty = True
+
+    def referenced_assets(self) -> set[str]:
+        """The mask asset this command can restore to the document."""
+        return {self._old} if self._old is not None else set()
 
     def text(self) -> str:
         return f"{'apply' if self._new else 'remove'} mask on {self._layer_id}"

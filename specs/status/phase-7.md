@@ -31,7 +31,7 @@ $ uv run mypy src
 Success: no issues found in 83 source files
 
 $ QT_QPA_PLATFORM=offscreen uv run pytest
-765 passed in 145.03s (0:02:25)
+798 passed in 138.11s (0:02:18)
 ```
 
 ## Acceptance checklist
@@ -55,9 +55,8 @@ $ QT_QPA_PLATFORM=offscreen uv run pytest
 
 ## Known issues / follow-ups
 
-- Save is synchronous: the content-addressed copy is bounded and the JSON
-  commit is atomic, but the copy does not yet run on a worker thread with a
-  progress indicator. Export already runs on a `QThread`.
+- The unsaved-changes prompt uses a synchronous save so the decision can be
+  resolved before continuing; explicit Save uses a worker thread.
 - Groups are applied per child in the scene (visibility and opacity) rather
   than as `QGraphicsItemGroup` parents. This matches the measured Qt
   group-opacity behavior and the export renderer.
@@ -71,6 +70,27 @@ $ QT_QPA_PLATFORM=offscreen uv run pytest
   import mode rejects duplicate basenames across test directories
   (`tests/pipeline/test_model.py` and `tests/runner/test_integration.py`
   already exist).
+
+## Review fixes
+
+- Save-time GC now keeps assets referenced by commands on the undo stack;
+  save runs on a worker thread and shutdown waits for it.
+- Masked layers larger than the proxy bound are masked at natural resolution
+  before proxying.
+- The live view no longer sets a background brush, so the document background
+  renders; the scene clips its background fill to the canvas rectangle.
+- Canvas undo/redo actions and shortcuts are wired; unsaved changes prompt on
+  new/open/close.
+- Layer rename preserves the cursor; locked layers reject edits, deletion,
+  nudging, masking, grouping, reordering, and group-property changes.
+- Asset tray filters to loader-supported formats, decodes thumbnails on
+  `QThreadPool`, and skips the full rescan on mode switches.
+- Asset-write `OSError`s and missing-asset sync failures are reported instead
+  of crashing.
+- Mask generation runs on `QThreadPool`; export cancellation and shutdown are
+  wired.
+- Lab run controls hide in Canvas mode; canvas save/export buttons are in the
+  canvas toolbar.
 
 ## Fixes during the phase
 

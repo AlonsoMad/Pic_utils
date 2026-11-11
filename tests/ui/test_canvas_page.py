@@ -6,7 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PySide6.QtWidgets import QFileDialog, QLabel
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox
 
 from pic_utils.blocks.registry import BlockRegistry
 from pic_utils.canvas.assets import AssetStore
@@ -92,15 +93,42 @@ class TestComposition:
         tray._list.setCurrentRow(0)
         assert tray.current_path() is not None
 
+    def test_asset_tray_skips_missing_result(self, qtbot: object, settings: Settings) -> None:
+        result = make_accepted_result(settings.results_root)
+        result.unlink()
+        tray = AssetTray(AcceptedIndex(settings.results_root))
+        qtbot.addWidget(tray)  # type: ignore[attr-defined]
+        assert tray._list.count() == 0
+
+    def test_asset_tray_missing_thumb_is_iconless(self, qtbot: object, settings: Settings) -> None:
+        result = make_accepted_result(settings.results_root)
+        thumb = result.parent.parent / "thumbs" / result.name
+        thumb.unlink()
+        tray = AssetTray(AcceptedIndex(settings.results_root))
+        qtbot.addWidget(tray)  # type: ignore[attr-defined]
+        assert tray._list.count() == 1
+        assert tray._list.item(0).icon().isNull()
+
+    def test_asset_tray_loads_thumbnail_async(self, qtbot: object, settings: Settings) -> None:
+        make_accepted_result(settings.results_root)
+        tray = AssetTray(AcceptedIndex(settings.results_root))
+        qtbot.addWidget(tray)  # type: ignore[attr-defined]
+        qtbot.waitUntil(  # type: ignore[attr-defined]
+            lambda: tray._list.count() == 1 and not tray._list.item(0).icon().isNull(),
+            timeout=5_000,
+        )
+
     def test_save_action(
         self,
         page: CanvasPage,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        qtbot: object,
     ) -> None:
         path = tmp_path / "page.pucanvas"
         monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(path), ""))
-        page.save_canvas()
+        with qtbot.waitSignal(page.canvas_actions().saved, timeout=10_000):  # type: ignore[attr-defined]
+            page.save_canvas()
         assert path.is_file()
 
     def test_export_action(
@@ -135,7 +163,11 @@ class TestShell:
         assert window._stack.currentWidget() is window.canvas_page()
 
     def test_new_canvas_action_clears_document(
-        self, qtbot: object, settings: Settings, tmp_path: Path
+        self,
+        qtbot: object,
+        settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         languages = LanguageManager(settings)
         window = MainWindow(settings, languages)
@@ -144,8 +176,44 @@ class TestShell:
         save_image(solid((1, 2, 3)), image)
         window.canvas_page()._add_layer_from_path(image)
         assert window.canvas_page().doc().layers
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.Discard,
+        )
         window._new_canvas.trigger()
         assert window.canvas_page().doc().layers == []
+
+    def test_run_controls_hidden_in_canvas_mode(self, qtbot: object, settings: Settings) -> None:
+        languages = LanguageManager(settings)
+        window = MainWindow(settings, languages)
+        qtbot.addWidget(window)  # type: ignore[attr-defined]
+        window._mode_canvas.trigger()
+        assert window._run_controls_host.isHidden()
+        window._mode_lab.trigger()
+        assert not window._run_controls_host.isHidden()
+
+    def test_close_event_cancel_keeps_window(
+        self,
+        qtbot: object,
+        settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        languages = LanguageManager(settings)
+        window = MainWindow(settings, languages)
+        qtbot.addWidget(window)  # type: ignore[attr-defined]
+        image = tmp_path / "layer.png"
+        save_image(solid((1, 2, 3)), image)
+        window.canvas_page()._add_layer_from_path(image)
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.Cancel,
+        )
+        event = QCloseEvent()
+        window.closeEvent(event)
+        assert not event.isAccepted()
 
     def test_canvas_open_signal_loads_document(
         self, qtbot: object, settings: Settings, tmp_path: Path

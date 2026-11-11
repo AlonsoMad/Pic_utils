@@ -173,6 +173,7 @@ def export_canvas(
     accepted: Sequence[Path] = (),
     run_results: Sequence[Path] = (),
     progress: Callable[[int, int], None] | None = None,
+    cancel: Callable[[], bool] | None = None,
 ) -> ExportReport:
     """Render and write one export folder (§11.2); atomic per file."""
     if fmt not in _FORMATS:
@@ -181,6 +182,8 @@ def export_canvas(
         raise ValueError(f"unsupported export scope {scope!r}")
     if not 1 <= jpeg_quality <= 100:
         raise ValueError(f"jpeg quality must be in 1..100, got {jpeg_quality}")
+    if cancel is not None and cancel():
+        raise ExportError("export cancelled")
 
     parent = Path(target_dir)
     try:
@@ -222,6 +225,8 @@ def export_canvas(
         results_folder.mkdir()
         used: set[str] = set()
         for done, source in enumerate(result_paths, start=2):
+            if cancel is not None and cancel():
+                raise ExportError("export cancelled")
             source_path = Path(source)
             name = _unique_result_name(source_path.stem, extension, used, results_folder)
             target = results_folder / name

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QTransform
 from PySide6.QtWidgets import (
@@ -32,6 +33,7 @@ from pic_utils.canvas.render import (
     qimage_from_image,
 )
 from pic_utils.core.errors import CanvasFileError
+from pic_utils.core.image import Image
 from pic_utils.io.loader import load_image, load_mask
 
 __all__ = ["CanvasScene", "LayerItem", "TransformHandle"]
@@ -116,6 +118,11 @@ class LayerItem(QGraphicsObject):
     def boundingRect(self) -> QRectF:
         width, height = self._natural_size
         return QRectF(0, 0, width, height)
+
+    @property
+    def proxy_size(self) -> tuple[int, int]:
+        """The current display proxy size (tests and diagnostics)."""
+        return self._image.width(), self._image.height()
 
     def set_image(self, image: QImage, natural_size: tuple[int, int]) -> None:
         """Replace the displayed proxy (ref, mask, or proxy bound changed)."""
@@ -231,7 +238,8 @@ class LayerItem(QGraphicsObject):
             scale = max(_MIN_SCALE, min(_MAX_SCALE, scale))
             rotation = self._start_rotation
         if final:
-            self.transform_finished.emit(self._layer.id, scale, rotation)
+            if (scale, rotation) != (self._start_scale, self._start_rotation):
+                self.transform_finished.emit(self._layer.id, scale, rotation)
             return
         self.setTransform(self._transform_for(scale, rotation))
 
@@ -280,12 +288,17 @@ class CanvasScene(QGraphicsScene):
         if value != self._proxy_long_side:
             self._proxy_long_side = value
             self._images.clear()
+            self._refs.clear()
             self.sync()
 
     def sync(self) -> None:
         """Create, update, and remove items so the scene matches the model."""
         doc = self._doc
         if doc is None:
+            for layer_id in list(self._items):
+                self.removeItem(self._items.pop(layer_id))
+            self._refs.clear()
+            self.update()
             return
         if doc.assets_dir is not None and (
             self._store is None or self._store.assets_dir != doc.assets_dir
@@ -326,7 +339,7 @@ class CanvasScene(QGraphicsScene):
     def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
         color = background_color(self._doc.background) if self._doc is not None else None
         if color is not None:
-            painter.fillRect(rect, color)
+            painter.fillRect(QRectF(rect).intersected(self.sceneRect()), color)
 
     # --- queries -------------------------------------------------------------
 
@@ -356,10 +369,15 @@ class CanvasScene(QGraphicsScene):
             raise CanvasFileError("canvas has no assets folder")
         image = load_image(self._store.resolve(layer.image_ref))
         natural_size = image.size
-        proxy = image.to_proxy(self._proxy_long_side)
         mask = (
             load_mask(self._store.resolve(layer.mask_ref)) if layer.mask_ref is not None else None
         )
-        result = (qimage_from_image(proxy, mask), natural_size)
+        if mask is not None:
+            rgba = image.to_rgba()
+            alpha = rgba[:, :, 3].astype(np.uint16)
+            rgba[:, :, 3] = (alpha * mask.data // 255).astype(np.uint8)
+            image = Image.from_rgba(rgba)
+        proxy = image.to_proxy(self._proxy_long_side)
+        result = (qimage_from_image(proxy), natural_size)
         self._images[key] = result
         return result

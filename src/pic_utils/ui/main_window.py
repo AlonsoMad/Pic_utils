@@ -175,7 +175,9 @@ class MainWindow(QMainWindow):
 
     def _switch_mode(self, action: QAction) -> None:
         """Switch the stacked page; the mode switch is the source of truth."""
-        if action is self._mode_lab:
+        is_lab = action is self._mode_lab
+        self._run_controls_host.setVisible(is_lab)
+        if is_lab:
             self._stack.setCurrentWidget(self._lab_page)
         else:
             self._stack.setCurrentWidget(self._canvas_page)
@@ -261,6 +263,16 @@ class MainWindow(QMainWindow):
 
     def set_run_status(self, text: str) -> None:
         self._run_status.setText(text)
+
+    # --- lifecycle ---------------------------------------------------------------------
+
+    def closeEvent(self, event) -> None:
+        """Prompt for unsaved canvas changes and stop worker threads."""
+        if not self._canvas_page.maybe_save(self):
+            event.ignore()
+            return
+        self._canvas_page.shutdown()
+        event.accept()
 
     # --- drag and drop -----------------------------------------------------------------
 

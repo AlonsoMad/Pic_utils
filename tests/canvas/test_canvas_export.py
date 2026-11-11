@@ -21,6 +21,7 @@ from pic_utils.canvas.export import (
 )
 from pic_utils.canvas.model import CanvasDoc, CanvasLayer
 from pic_utils.canvas.scene import CanvasScene
+from pic_utils.core.errors import ExportError
 from pic_utils.core.image import BlendMode, Image, Mask
 from pic_utils.io.saver import save_image
 
@@ -243,6 +244,12 @@ class TestExport:
         )
         names = sorted(path.name for path in (report.folder / "results").iterdir())
         assert names == ["result-2.png", "result.png"]
+
+    def test_export_cancels_before_writing(self, tmp_path: Path, store: AssetStore) -> None:
+        doc = CanvasDoc(size=(8, 8), assets_dir=store.assets_dir)
+        doc.add_layer(make_layer(store, "a"))
+        with pytest.raises(ExportError, match="cancelled"):
+            export_canvas(doc, tmp_path, cancel=lambda: True)
 
     def test_invalid_options_rejected(self, tmp_path: Path, store: AssetStore) -> None:
         doc = CanvasDoc(assets_dir=store.assets_dir)

@@ -8,12 +8,21 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QDialog, QInputDialog, QSplitter
+from PySide6.QtWidgets import (
+    QDialog,
+    QInputDialog,
+    QListWidgetItem,
+    QMessageBox,
+    QSplitter,
+)
 
 from pic_utils.blocks.registry import BlockRegistry
+from pic_utils.canvas.assets import AssetStore
+from pic_utils.core.errors import CanvasFileError
 from pic_utils.core.image import Image, Mask
 from pic_utils.io.saver import save_image
 from pic_utils.settings import Settings
+from pic_utils.ui.canvas.asset_tray import AssetTray
 from pic_utils.ui.canvas.page import CanvasPage
 from pic_utils.ui.dialogs.mask_dialog import MaskDialog
 
@@ -69,6 +78,51 @@ class TestComposition:
         page.retranslate()
         assert page.layer_list()._up.text()
 
+    def test_view_does_not_override_scene_background(self, page: CanvasPage) -> None:
+        assert page.canvas_view().backgroundBrush().style() == Qt.BrushStyle.NoBrush
+
+    def test_shutdown_discards_temporary_assets(
+        self, page: CanvasPage, image_paths: list[Path]
+    ) -> None:
+        add_layers(page, image_paths[:1])
+        assets_dir = page.doc().assets_dir
+        assert assets_dir is not None and assets_dir.exists()
+        page.shutdown()
+        assert not assets_dir.exists()
+
+    def test_undo_redo_actions(self, page: CanvasPage, image_paths: list[Path]) -> None:
+        assert not page._undo_action.isEnabled()
+        add_layers(page, image_paths[:1])
+        assert page._undo_action.isEnabled()
+        page._undo_action.trigger()
+        assert page.doc().layers == []
+        assert page._redo_action.isEnabled()
+        page._redo_action.trigger()
+        assert len(page.doc().layers) == 1
+
+    def test_new_document_prompt_cancel_and_discard(
+        self,
+        page: CanvasPage,
+        image_paths: list[Path],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        add_layers(page, image_paths[:1])
+        page.doc().dirty = True
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.Cancel,
+        )
+        page.new_document()
+        assert page.doc().layers
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.Discard,
+        )
+        page.new_document()
+        assert page.doc().layers == []
+
 
 class TestLayers:
     def test_add_layer_from_file(self, page: CanvasPage, image_paths: list[Path]) -> None:
@@ -89,6 +143,40 @@ class TestLayers:
         assert page.layer_properties().selected_layer_id() == layer_id
         page._on_property_changed(layer_id, "opacity", 0.5)
         assert page.layer_properties().selected_layer_id() == layer_id
+
+    def test_rename_preserves_cursor(self, page: CanvasPage, image_paths: list[Path]) -> None:
+        layer_id = add_layers(page, image_paths[:1])[0]
+        layer = page.doc().layer(layer_id)
+        panel = page.layer_properties()
+        panel.set_layer(layer, page.doc().groups)
+        panel._name.setText(layer.name)
+        panel._name.setCursorPosition(1)
+        panel.set_layer(layer, page.doc().groups)
+        assert panel._name.cursorPosition() == 1
+
+    def test_locked_layer_blocks_edits(self, page: CanvasPage, image_paths: list[Path]) -> None:
+        layer_id = add_layers(page, image_paths[:1])[0]
+        page._on_property_changed(layer_id, "locked", True)
+        assert page.doc().layer(layer_id).locked
+        page._select_layer(layer_id)
+        page._delete_selected()
+        assert page.doc().layer(layer_id) is not None
+        page._on_nudge_requested(5.0, 5.0)
+        assert page.doc().layer(layer_id).x == 0.0
+        page._on_property_changed(layer_id, "opacity", 0.5)
+        assert page.doc().layer(layer_id).opacity == 1.0
+        page._on_property_changed(layer_id, "locked", False)
+        assert not page.doc().layer(layer_id).locked
+
+    def test_locked_group_properties_blocked(
+        self, page: CanvasPage, image_paths: list[Path]
+    ) -> None:
+        ids = add_layers(page, image_paths[:2])
+        page._on_group_requested(ids)
+        group_id = next(iter(page.doc().groups))
+        page._on_property_changed(ids[0], "locked", True)
+        page._on_group_property_changed(group_id, "opacity", 0.5)
+        assert page.doc().groups[group_id].opacity == 1.0
 
     def test_visibility_toggle_is_undoable(self, page: CanvasPage, image_paths: list[Path]) -> None:
         layer_id = add_layers(page, image_paths[:1])[0]
@@ -190,6 +278,13 @@ class TestMasks:
         assert isinstance(mask, Mask)
         assert mask.data.shape == (8, 8)
 
+    def test_mask_dialog_accepts_async(self, page: CanvasPage, qtbot: object) -> None:
+        dialog = MaskDialog(solid((255, 0, 0), size=8), page._registry.snapshot())
+        dialog._block_combo.setCurrentText("channel_mask")
+        with qtbot.waitSignal(dialog.accepted, timeout=5_000):  # type: ignore[attr-defined]
+            dialog.accept()
+        assert dialog.result_mask() is not None
+
     def test_apply_mask_via_page(
         self,
         page: CanvasPage,
@@ -209,6 +304,20 @@ class TestMasks:
 
 
 class TestAssetTray:
+    def test_image_pattern_excludes_unsupported_formats(self) -> None:
+        pattern = AssetTray.image_pattern()
+        assert ".bmp" not in pattern
+        assert ".webp" not in pattern
+        assert ".png" in pattern
+
+    def test_double_click_emits_path(self, page: CanvasPage, image_paths: list[Path]) -> None:
+        received: list[Path] = []
+        page.asset_tray().add_requested.connect(received.append)
+        item = QListWidgetItem("result")
+        item.setData(Qt.ItemDataRole.UserRole, str(image_paths[0]))
+        page.asset_tray()._add_item(item)
+        assert received == [image_paths[0]]
+
     def test_add_file_signal(
         self, page: CanvasPage, image_paths: list[Path], monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -221,6 +330,46 @@ class TestAssetTray:
         page.asset_tray().add_requested.connect(received.append)
         page.asset_tray()._add_file_dialog()
         assert received == [image_paths[0]]
+
+
+class TestErrorHandling:
+    def test_add_layer_oserror_notifies(
+        self,
+        page: CanvasPage,
+        image_paths: list[Path],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        messages: list[str] = []
+        page.notify.connect(messages.append)
+
+        def fail(self: AssetStore, image: Image) -> str:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(AssetStore, "put_image", fail)
+        page._add_layer_from_path(image_paths[0])
+        assert messages and "disk full" in messages[0]
+
+    def test_sync_missing_asset_notifies(
+        self, page: CanvasPage, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        messages: list[str] = []
+        page.notify.connect(messages.append)
+
+        def fail() -> None:
+            raise CanvasFileError("asset disappeared")
+
+        monkeypatch.setattr(page.canvas_view(), "sync", fail)
+        page._sync()
+        assert messages and "asset disappeared" in messages[0]
+
+    def test_mask_none_is_retranslated(self, page: CanvasPage, image_paths: list[Path]) -> None:
+        layer_id = add_layers(page, image_paths[:1])[0]
+        panel = page.layer_properties()
+        panel.set_layer(page.doc().layer(layer_id), page.doc().groups)
+        assert panel._mask.text() == panel.tr("None")
+        panel._mask_ref = "mask.mask.png"
+        panel.retranslate()
+        assert panel._mask.text() == "mask.mask.png"
 
 
 class TestExportDialog:

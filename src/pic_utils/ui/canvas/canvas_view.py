@@ -41,7 +41,6 @@ class CanvasView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setBackgroundBrush(_CHECKER_DARK)
         self._zoom = 1.0
         self._crop_mode = False
         self._crop_rect: QRectF | None = None

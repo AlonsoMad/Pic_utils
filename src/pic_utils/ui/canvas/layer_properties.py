@@ -50,6 +50,7 @@ class LayerPropertiesPanel(QWidget):
         super().__init__(parent)
         self._layer_id: str | None = None
         self._group_id: str | None = None
+        self._mask_ref: str | None = None
         self._updating = False
         self._labels: dict[str, QLabel] = {}
 
@@ -165,12 +166,14 @@ class LayerPropertiesPanel(QWidget):
             self._group_visible.setChecked(False)
             self._group_opacity.setEnabled(False)
             self._group_visible.setEnabled(False)
-            self._mask.setText("")
+            self._mask_ref = None
+            self._mask.setText(self.tr("None"))
             self._updating = False
             return
         self._updating = True
         try:
-            self._name.setText(layer.name)
+            if self._name.text() != layer.name:
+                self._name.setText(layer.name)
             self._x.setValue(layer.x)
             self._y.setValue(layer.y)
             self._scale.setValue(layer.scale)
@@ -195,10 +198,36 @@ class LayerPropertiesPanel(QWidget):
             self._group_visible.setEnabled(group is not None)
             self._group_opacity.setValue(round(group.opacity * 100) if group else 0)
             self._group_visible.setChecked(group.visible if group else False)
+            self._mask_ref = layer.mask_ref
             self._mask.setText(layer.mask_ref if layer.mask_ref else self.tr("None"))
-            self._mask_remove.setEnabled(layer.mask_ref is not None)
+            self._apply_lock_state(layer.locked)
         finally:
             self._updating = False
+
+    def _apply_lock_state(self, locked: bool) -> None:
+        for widget in (
+            self._name,
+            self._x,
+            self._y,
+            self._scale,
+            self._rotation,
+            self._flip_h,
+            self._flip_v,
+            self._opacity_slider,
+            self._opacity_spin,
+            self._blend,
+            self._group,
+            self._group_opacity,
+            self._group_visible,
+            self._mask_button,
+        ):
+            widget.setEnabled(not locked)
+        self._visible.setEnabled(True)
+        self._locked.setEnabled(True)
+        self._mask_remove.setEnabled(not locked and self._mask_ref is not None)
+        if not locked:
+            self._group_opacity.setEnabled(self._group_id is not None)
+            self._group_visible.setEnabled(self._group_id is not None)
 
     # --- signals -------------------------------------------------------------
 
@@ -284,5 +313,6 @@ class LayerPropertiesPanel(QWidget):
             self._blend.setItemText(index, text)
         if self._group.count():
             self._group.setItemText(0, self.tr("None"))
+        self._mask.setText(self._mask_ref or self.tr("None"))
         self._mask_button.setText(self.tr("Generate mask…"))
         self._mask_remove.setText(self.tr("Remove mask"))

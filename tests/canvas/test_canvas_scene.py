@@ -157,6 +157,79 @@ class TestScene:
         assert received[0][0] == "a"
         assert received[0][1] == pytest.approx(2.0)
 
+    def test_masked_layer_larger_than_proxy_does_not_crash(self, store: AssetStore) -> None:
+        image = Image.from_rgb(np.full((64, 64, 3), (255, 0, 0), dtype=np.uint8))
+        mask = Mask(np.full((64, 64), 255, dtype=np.uint8))
+        doc = CanvasDoc(size=(64, 64), assets_dir=store.assets_dir)
+        doc.add_layer(
+            CanvasLayer(
+                id="a",
+                name="a",
+                image_ref=store.put_image(image),
+                mask_ref=store.put_mask(mask),
+            )
+        )
+        scene = CanvasScene()
+        scene.set_proxy_long_side(8)
+        scene.set_doc(doc)
+        item = scene.layer_item("a")
+        assert item is not None
+        assert item.proxy_size == (8, 8)
+
+    def test_set_proxy_invalidates_existing_items(self, store: AssetStore) -> None:
+        image = Image.from_rgb(np.full((64, 64, 3), (255, 0, 0), dtype=np.uint8))
+        doc = CanvasDoc(size=(64, 64), assets_dir=store.assets_dir)
+        doc.add_layer(CanvasLayer(id="a", name="a", image_ref=store.put_image(image)))
+        scene = CanvasScene()
+        scene.set_doc(doc)
+        item = scene.layer_item("a")
+        assert item is not None
+        assert item.proxy_size == (64, 64)
+        scene.set_proxy_long_side(8)
+        assert item.proxy_size == (8, 8)
+
+    def test_set_doc_none_clears_items(self, store: AssetStore) -> None:
+        doc = CanvasDoc(size=(8, 8), assets_dir=store.assets_dir)
+        doc.add_layer(make_layer(store, "a"))
+        scene = CanvasScene()
+        scene.set_doc(doc)
+        assert scene.items()
+        scene.set_doc(None)
+        assert scene.items() == []
+
+    def test_background_is_clipped_to_scene_rect(self, store: AssetStore) -> None:
+        doc = CanvasDoc(size=(16, 16), background="#ffffff", assets_dir=store.assets_dir)
+        scene = CanvasScene()
+        scene.set_doc(doc)
+        image = QImage(32, 32, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0)
+        painter = QPainter(image)
+        try:
+            scene.drawBackground(painter, QRectF(0, 0, 32, 32))
+        finally:
+            painter.end()
+        assert image.pixelColor(8, 8).name() == "#ffffff"
+        assert image.pixelColor(24, 24).alpha() == 0
+
+    def test_noop_handle_release_emits_nothing(self, store: AssetStore) -> None:
+        doc = CanvasDoc(size=(10, 10), assets_dir=store.assets_dir)
+        doc.add_layer(make_layer(store, "a"))
+        scene = CanvasScene()
+        scene.set_doc(doc)
+        item = scene.layer_item("a")
+        assert item is not None
+        item.setSelected(True)
+        received: list[tuple[str, float, float]] = []
+        item.transform_finished.connect(
+            lambda layer_id, scale, rotation: received.append((layer_id, scale, rotation))
+        )
+        handle_pos = item.mapToScene(
+            QPointF(item.boundingRect().width(), item.boundingRect().height())
+        )
+        item.handle_press("se", handle_pos)
+        item.handle_drag("se", handle_pos, final=True)
+        assert received == []
+
     def test_proxy_is_drawn_at_natural_size(self, store: AssetStore) -> None:
         doc = CanvasDoc(size=(8, 8), background=None, assets_dir=store.assets_dir)
         doc.add_layer(make_layer(store, "a", (255, 0, 0)))
@@ -202,13 +275,35 @@ class TestCommands:
         doc.add_layer(make_layer(store, "a"))
         first = TransformLayerCommand(doc, "a", 1.0, 2.0, 1.0, 0.0)
         first.redo()
-        second = TransformLayerCommand(doc, "a", 3.0, 4.0, 2.0, 10.0)
+        second = TransformLayerCommand(doc, "a", 3.0, 4.0, 1.0, 0.0)
         assert first.id() == second.id()
         assert first.mergeWith(second)
         first.redo()
         assert (doc.layer("a").x, doc.layer("a").y) == (3.0, 4.0)
         first.undo()
         assert (doc.layer("a").x, doc.layer("a").y) == (0.0, 0.0)
+
+    def test_transform_merge_does_not_collapse_move_and_scale(self, store: AssetStore) -> None:
+        doc = CanvasDoc(assets_dir=store.assets_dir)
+        doc.add_layer(make_layer(store, "a"))
+        move = TransformLayerCommand(doc, "a", 10.0, 10.0, 1.0, 0.0)
+        move.redo()
+        scale = TransformLayerCommand(doc, "a", 10.0, 10.0, 2.0, 0.0)
+        assert move.id() == scale.id()
+        assert not move.mergeWith(scale)
+
+    def test_add_layer_undo_restores_canvas_size(self, store: AssetStore) -> None:
+        doc = CanvasDoc(assets_dir=store.assets_dir)
+        command = AddLayerCommand(
+            doc,
+            make_layer(store, "a"),
+            natural_size=(800, 600),
+        )
+        command.redo()
+        assert doc.size == (800, 600)
+        command.undo()
+        assert doc.layers == []
+        assert doc.size == (1, 1)
 
     def test_property_command_and_merge(self, store: AssetStore) -> None:
         doc = CanvasDoc(assets_dir=store.assets_dir)
@@ -247,6 +342,17 @@ class TestCommands:
         command.undo()
         assert doc.layer("c").group_id is None
         assert [layer.id for layer in doc.layers] == ["a", "b", "c"]
+
+    def test_set_layer_group_command_restores_dropped_group(self, store: AssetStore) -> None:
+        doc = CanvasDoc(assets_dir=store.assets_dir)
+        doc.add_layer(make_layer(store, "a"))
+        group = doc.group_layers(["a"])
+        command = SetLayerGroupCommand(doc, "a", None)
+        command.redo()
+        assert group.id not in doc.groups
+        command.undo()
+        assert group.id in doc.groups
+        assert doc.layer("a").group_id == group.id
 
     def test_apply_mask_command(self, store: AssetStore) -> None:
         doc = CanvasDoc(assets_dir=store.assets_dir)

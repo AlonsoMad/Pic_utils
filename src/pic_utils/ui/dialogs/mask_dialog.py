@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -35,6 +35,36 @@ __all__ = ["MaskDialog"]
 _PREVIEW_SIZE = 256
 
 
+class _MaskSignals(QObject):
+    finished = Signal(object, str)  # Mask, purpose
+    failed = Signal(str, str)  # message, purpose
+
+
+class _MaskWorker(QRunnable):
+    """Run one mask block off the GUI thread."""
+
+    def __init__(self, definition, image: Image, values: dict[str, Any], purpose: str) -> None:
+        super().__init__()
+        self._definition = definition
+        self._image = image
+        self._values = values
+        self._purpose = purpose
+        self._signals = _MaskSignals()
+
+    def signals(self) -> _MaskSignals:
+        return self._signals
+
+    def run(self) -> None:
+        try:
+            result = self._definition.fn(self._image, **self._values)
+            if not isinstance(result, Mask):
+                raise TypeError(f"block {self._definition.name!r} did not return a Mask")
+        except Exception as error:
+            self._signals.failed.emit(str(error), self._purpose)
+            return
+        self._signals.finished.emit(result, self._purpose)
+
+
 class MaskDialog(QDialog):
     """Pick a mask block, edit parameters, preview, and accept a mask."""
 
@@ -49,6 +79,8 @@ class MaskDialog(QDialog):
         self._snapshot = snapshot
         self._values: dict[str, Any] = {}
         self._mask: Mask | None = None
+        self._busy = False
+        self._thread_pool = QThreadPool.globalInstance()
 
         self._block_combo = QComboBox(self)
         for name in sorted(snapshot):
@@ -133,14 +165,54 @@ class MaskDialog(QDialog):
     # --- preview and accept --------------------------------------------------
 
     def _preview_mask(self) -> None:
-        self.setCursor(Qt.CursorShape.WaitCursor)
-        try:
-            mask = self._compute_mask()
-        except Exception as error:
-            self._preview.setText(str(error))
+        self._start_worker("preview")
+
+    def _start_worker(self, purpose: str) -> None:
+        if self._busy:
             return
-        finally:
+        name = self.block_name()
+        if name is None:
+            return
+        worker = _MaskWorker(
+            self._snapshot.get(name),
+            self._image,
+            dict(self._values),
+            purpose,
+        )
+        worker.signals().finished.connect(self._on_worker_finished)
+        worker.signals().failed.connect(self._on_worker_failed)
+        self._set_busy(True)
+        self._thread_pool.start(worker)
+
+    def _set_busy(self, busy: bool) -> None:
+        self._busy = busy
+        self._preview_button.setEnabled(not busy)
+        ok = self._buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok is not None:
+            ok.setEnabled(not busy)
+        if busy:
+            self.setCursor(Qt.CursorShape.WaitCursor)
+        else:
             self.unsetCursor()
+
+    def _on_worker_finished(self, mask: object, purpose: str) -> None:
+        self._set_busy(False)
+        if not isinstance(mask, Mask):
+            return
+        if purpose == "accept":
+            self._mask = mask
+            super().accept()
+            return
+        self._show_mask(mask)
+
+    def _on_worker_failed(self, message: str, purpose: str) -> None:
+        self._set_busy(False)
+        if purpose == "accept":
+            QMessageBox.warning(self, self.tr("Mask generation failed"), message)
+        else:
+            self._preview.setText(message)
+
+    def _show_mask(self, mask: Mask) -> None:
         data = np.ascontiguousarray(mask.data)
         height, width = data.shape
         qimage = QImage(
@@ -159,16 +231,12 @@ class MaskDialog(QDialog):
         self._preview.setPixmap(pixmap)
 
     def accept(self) -> None:
-        self.setCursor(Qt.CursorShape.WaitCursor)
-        try:
-            mask = self._compute_mask()
-        except Exception as error:
-            QMessageBox.warning(self, self.tr("Mask generation failed"), str(error))
+        if self._busy:
             return
-        finally:
-            self.unsetCursor()
-        self._mask = mask
-        super().accept()
+        if self._mask is not None:
+            super().accept()
+            return
+        self._start_worker("accept")
 
     # --- i18n ----------------------------------------------------------------
 

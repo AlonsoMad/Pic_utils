@@ -92,6 +92,38 @@ class TestSaveLoad:
         assert actions.open(path) is None
         assert messages and reference in messages[0]
 
+    def test_save_keep_preserves_undo_asset(
+        self,
+        actions: CanvasActions,
+        doc: CanvasDoc,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        path = tmp_path / "collage.pucanvas"
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(path), ""))
+        assert actions.save(doc) == path
+        reference = doc.layers[0].image_ref
+        doc.remove_layer("a")
+        assert actions.save(doc, keep={reference}) == path
+        assert (assets_dir_for(path) / reference).is_file()
+        doc.add_layer(CanvasLayer(id="a", name="a", image_ref=reference))
+        assert actions.save(doc) == path
+
+    def test_save_async(
+        self,
+        actions: CanvasActions,
+        doc: CanvasDoc,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        qtbot: object,
+    ) -> None:
+        path = tmp_path / "collage.pucanvas"
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(path), ""))
+        with qtbot.waitSignal(actions.saved, timeout=10_000):  # type: ignore[attr-defined]
+            actions.save_async(doc)
+        assert path.is_file()
+        assert actions.wait_for_save(10_000)
+
     def test_saved_document_is_clean(
         self,
         actions: CanvasActions,
@@ -145,6 +177,14 @@ class TestExport:
         second = actions.export(doc, options)
         assert first is not None and second is not None
         assert first.folder != second.folder
+
+    def test_shutdown_waits_for_export(
+        self, actions: CanvasActions, doc: CanvasDoc, tmp_path: Path
+    ) -> None:
+        options = ExportOptions(target_dir=tmp_path / "out")
+        actions.export_async(doc, options)
+        actions.shutdown()
+        assert actions.wait_for_export(1_000)
 
     def test_export_scope_uses_accepted(
         self, actions: CanvasActions, doc: CanvasDoc, tmp_path: Path

@@ -369,8 +369,11 @@ class CanvasDoc:
     def set_layer_group(self, layer_id: str, group_id: str | None) -> None:
         """Assign a layer to a group, keeping members contiguous."""
         layer = self.layer(layer_id)
+        if layer.group_id == group_id:
+            return
         if group_id is None:
             layer.group_id = None
+            self._drop_empty_groups()
             self.dirty = True
             return
         if group_id not in self.groups:
@@ -382,6 +385,7 @@ class CanvasDoc:
         insert_at = max(member_indices) + 1 if member_indices else len(self.layers)
         self.layers.insert(insert_at, layer)
         layer.group_id = group_id
+        self._drop_empty_groups()
         self.dirty = True
 
     def _drop_empty_groups(self) -> None:
@@ -440,7 +444,11 @@ class CanvasDoc:
         if raw.get("format") != CANVAS_FORMAT:
             raise CanvasFileError(f"format must be {CANVAS_FORMAT!r}")
         version = raw.get("version")
-        if not isinstance(version, int) or isinstance(version, bool) or version > CANVAS_VERSION:
+        if (
+            not isinstance(version, int)
+            or isinstance(version, bool)
+            or not 1 <= version <= CANVAS_VERSION
+        ):
             raise CanvasFileError(f"unsupported canvas version {version!r}")
 
         size = raw.get("size", [1, 1])
@@ -503,11 +511,14 @@ def save_canvas(
     doc: CanvasDoc,
     *,
     progress: Callable[[int, int], None] | None = None,
+    keep: set[str] | None = None,
 ) -> None:
     """Save ``doc`` to ``path``, copying assets before the JSON commit.
 
     Existing content-addressed files are never rewritten. The JSON write is
-    the commit point; unreferenced assets are collected afterwards.
+    the commit point; unreferenced assets are collected afterwards. ``keep``
+    names assets that must survive GC even though the current document does
+    not reference them (for example, assets held by undo commands).
 
     Raises:
         CanvasFileError: a referenced asset cannot be found.
@@ -534,7 +545,7 @@ def save_canvas(
     doc.dirty = False
     if was_temporary and previous_assets is not None and previous_assets != store.assets_dir:
         shutil.rmtree(previous_assets, ignore_errors=True)
-    store.gc(doc.referenced_assets())
+    store.gc(doc.referenced_assets() | (keep or set()))
 
 
 def load_canvas(path: str | Path) -> CanvasDoc:
