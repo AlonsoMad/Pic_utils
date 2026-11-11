@@ -93,9 +93,7 @@ def pane(qtbot: object):
 
 
 class TestPreviewPane:
-    def test_request_renders_after_debounce(
-        self, pane, qtbot, source_png: Path
-    ) -> None:
+    def test_request_renders_after_debounce(self, pane, qtbot, source_png: Path) -> None:
         updates: list[tuple[int, int]] = []
         pane.preview_updated.connect(lambda g, ms: updates.append((g, ms)))
         pane.request({"steps": [{"id": "a", "block": "channel_permute"}]}, str(source_png))
