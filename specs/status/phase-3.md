@@ -41,6 +41,9 @@ $ uv run pytest tests/blocks
 125 passed in 7.07s
 ```
 
+CI: GitHub Actions run `42972858845` on `main` completed successfully
+(`ubuntu-latest` 29s, `windows-latest` 53s; Python 3.12).
+
 Registered built-ins (9):
 
 ```
@@ -70,6 +73,7 @@ conditional_overlay, double_exposure, overlay, permutation_grid, segment
 - [x] No block imports `io/`, `ui/`, `runner/`, or `canvas/`; no `print`,
       no file I/O, no Pillow/matplotlib, no global RNG.
 - [x] `pytest tests/blocks` green (125 passed); mypy clean.
+- [x] CI green on Linux and Windows.
 - [x] `specs/status/phase-3.md` written; tag `phase-3` created.
 
 ## Known issues / follow-ups
@@ -93,3 +97,7 @@ conditional_overlay, double_exposure, overlay, permutation_grid, segment
 - Task branches were not used: workspace policy blocks `git switch`. Each
   task was committed on `main` after its own gate run, matching the P0-03
   and Phase 2 precedent.
+- The first `phase-3` tag was created at `c4d0be1` before CI ran; Windows
+  failed on a path-separator assertion in `tests/blocks/test_api.py`. The
+  test was fixed in `7a67adf`, CI passed on both runners, and the tag was
+  re-pointed to the green commit.
