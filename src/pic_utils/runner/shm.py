@@ -33,7 +33,9 @@ class SharedImageStore:
     def __init__(self, run_id: str) -> None:
         self._run_id = run_id
         self._counter = itertools.count()
-        self._blocks: dict[str, tuple[shared_memory.SharedMemory, shared_memory.SharedMemory | None]] = {}
+        self._blocks: dict[
+            str, tuple[shared_memory.SharedMemory, shared_memory.SharedMemory | None]
+        ] = {}
 
     @property
     def total_bytes(self) -> int:

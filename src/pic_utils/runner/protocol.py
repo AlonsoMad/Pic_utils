@@ -54,6 +54,7 @@ class ImageHandle:
 class ExperimentTask:
     """One experiment dispatched to a worker."""
 
+    run_id: str
     run_dir: str
     experiment: ExperimentSpec
     pipeline: dict  # serialized Pipeline (Pipeline.to_dict())
