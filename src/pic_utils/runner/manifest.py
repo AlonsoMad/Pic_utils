@@ -166,6 +166,7 @@ class RunStore:
         """
         for directory in (_RESULTS_DIR, _THUMBS_DIR, _BLOCKS_DIR):
             (self.run_dir / directory).mkdir(parents=True, exist_ok=True)
+        write_json_atomic(self.curation_path, {})
         self.write_manifest({**header, "status": "running"})
         return self.run_dir
 
