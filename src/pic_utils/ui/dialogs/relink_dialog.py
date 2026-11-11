@@ -26,9 +26,7 @@ __all__ = ["RelinkDialog"]
 class RelinkDialog(QDialog):
     """One row per missing file; returns the remapping on accept."""
 
-    def __init__(
-        self, missing: list[Path], parent: QWidget | None = None
-    ) -> None:
+    def __init__(self, missing: list[Path], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._missing = list(missing)
         self._picks: dict[Path, Path] = {}

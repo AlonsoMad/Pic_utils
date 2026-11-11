@@ -160,7 +160,7 @@ def load_project(path: Path) -> ProjectData:
         master_seed=int(run_raw.get("master_seed", 0)),
         axes=axes,  # type: ignore[arg-type]
         sampled=tuple(
-            (s.get("step_id"), s.get("param"))
+            (str(s.get("step_id", "")), str(s.get("param", "")))
             for s in run_raw.get("sampled", [])
             if isinstance(s, dict)
         ),

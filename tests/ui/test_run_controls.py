@@ -140,13 +140,11 @@ class TestLaunch:
 
 class TestStatus:
     def test_progress_display(self, panel: RunControls) -> None:
-        from pic_utils.runner.service import RunSummary
 
         panel.show_progress(3, 10)
         assert "3 / 10" in panel._summary.text()
 
     def test_summary_display(self, panel: RunControls) -> None:
-        from pic_utils.runner.service import RunSummary
 
         summary = RunSummary(
             run_id="r", status="completed", completed=7, failed=1, cancelled=2, elapsed_ms=5400

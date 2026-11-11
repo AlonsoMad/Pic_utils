@@ -15,10 +15,12 @@ from PySide6.QtCore import (
     QAbstractListModel,
     QModelIndex,
     QObject,
+    QPersistentModelIndex,
     QRunnable,
     Qt,
     QThreadPool,
     Signal,
+    SignalInstance,
 )
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
@@ -54,7 +56,7 @@ class ThumbnailLoader(QRunnable):
     _signals = Signals()
 
     @classmethod
-    def loaded_signal(cls) -> Signal:
+    def loaded_signal(cls) -> SignalInstance:
         return cls._signals.loaded
 
     def __init__(self, thumb_path: str, size: int = _THUMB_SIZE) -> None:
@@ -131,7 +133,7 @@ class ResultsGridModel(QAbstractListModel):
         self.endResetModel()
         self.curation_changed.emit()
 
-    def rowCount(self, parent: QModelIndex | None = None) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         if parent is not None and parent.isValid():
             return 0
         if not self._show_discarded:
@@ -143,7 +145,11 @@ class ResultsGridModel(QAbstractListModel):
             return self._records
         return [r for r in self._records if self._state(r.id) != "discarded"]
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
         records = self._visible_records()
         if not 0 <= index.row() < len(records):
             return None
@@ -364,5 +370,5 @@ class ResultsGrid(QWidget):
 
     def _on_double_clicked(self, index: QModelIndex) -> None:
         record = self._model.data(index, ROLE_RECORD)
-        if record is not None:
+        if isinstance(record, ResultRecord):
             self.view_requested.emit(record.id, record)

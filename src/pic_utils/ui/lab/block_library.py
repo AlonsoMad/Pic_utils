@@ -16,6 +16,7 @@ from PySide6.QtCore import (
     QFileSystemWatcher,
     QModelIndex,
     QObject,
+    QPersistentModelIndex,
     QSortFilterProxyModel,
     Qt,
     QTimer,
@@ -79,12 +80,16 @@ class BlockLibraryModel(QAbstractListModel):
 
     # --- QAbstractListModel -------------------------------------------------
 
-    def rowCount(self, parent: QModelIndex | None = None) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         if parent is not None and parent.isValid():
             return 0
         return len(self._rows)
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
         if not 0 <= index.row() < len(self._rows):
             return None
         definition = self._rows[index.row()].definition
@@ -135,7 +140,9 @@ class BlockLibraryProxy(QSortFilterProxyModel):
         self._category = label
         self.endFilterChange()
 
-    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
+    def filterAcceptsRow(
+        self, source_row: int, source_parent: QModelIndex | QPersistentModelIndex
+    ) -> bool:
         model = self.sourceModel()
         assert isinstance(model, BlockLibraryModel)
         index = model.index(source_row, 0, source_parent)
@@ -252,7 +259,9 @@ class BlockLibraryPanel(QWidget):
             self._reported_errors.clear()
             self.reload_succeeded.emit()
             return
-        fresh = [error for error in report.errors if self._error_key(error) not in self._reported_errors]
+        fresh = [
+            error for error in report.errors if self._error_key(error) not in self._reported_errors
+        ]
         for error in fresh:
             self._reported_errors.add(self._error_key(error))
         if fresh:

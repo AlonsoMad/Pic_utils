@@ -50,9 +50,7 @@ class TestServeRequest:
 
         response = serve_request(_request(source_png, {"steps": []}))
         assert response.png_bytes is not None
-        array = cv2.imdecode(
-            np.frombuffer(response.png_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
-        )
+        array = cv2.imdecode(np.frombuffer(response.png_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
         assert max(array.shape[0], array.shape[1]) == 32
 
     def test_pipeline_applied(self, source_png: Path) -> None:
@@ -62,17 +60,13 @@ class TestServeRequest:
         pipeline = {"steps": [{"id": "a", "block": "channel_permute", "params": {"order": "bgr"}}]}
         response = serve_request(_request(source_png, pipeline))
         assert response.error is None
-        array = cv2.imdecode(
-            np.frombuffer(response.png_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
-        )
+        array = cv2.imdecode(np.frombuffer(response.png_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
         # The source's blue channel ramps horizontally; after a bgr permute it
         # lands on the red channel, which cv2 reads back in slot 0.
         assert array[10, -1, 0] > array[10, -1, 2]
 
     def test_error_response_carries_message(self, tmp_path: Path) -> None:
-        response = serve_request(
-            _request(tmp_path / "missing.png", {"steps": []})
-        )
+        response = serve_request(_request(tmp_path / "missing.png", {"steps": []}))
         assert response.png_bytes is None
         assert response.error is not None
         assert "missing.png" in response.error
@@ -90,16 +84,12 @@ class TestServeRequest:
 
 
 class TestPreviewPane:
-    def test_request_renders_after_debounce(
-        self, qtbot: object, source_png: Path
-    ) -> None:
+    def test_request_renders_after_debounce(self, qtbot: object, source_png: Path) -> None:
         pane = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
         qtbot.addWidget(pane)  # type: ignore[attr-defined]
         updates: list[tuple[int, int]] = []
         pane.preview_updated.connect(lambda g, ms: updates.append((g, ms)))
-        pane.request(
-            {"steps": [{"id": "a", "block": "channel_permute"}]}, str(source_png)
-        )
+        pane.request({"steps": [{"id": "a", "block": "channel_permute"}]}, str(source_png))
         qtbot.waitUntil(lambda: bool(updates), timeout=10_000)  # type: ignore[attr-defined]
         assert updates[0][0] == 1
 

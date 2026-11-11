@@ -82,9 +82,7 @@ _proxy_cache: dict[str, tuple[float, Image]] = {}
 _snapshot_cache: dict[str, tuple[float, Any]] = {}
 
 
-def _load_cached(
-    path: str, cache: dict[str, tuple[float, Image]], scale_to: int | None
-) -> Image:
+def _load_cached(path: str, cache: dict[str, tuple[float, Image]], scale_to: int | None) -> Image:
     """Load (and optionally downscale) an image, cached by path+mtime."""
     from pathlib import Path
 
@@ -235,11 +233,11 @@ class PreviewClient:
 
     def __init__(self, on_response: Callable[[PreviewResponse], None]) -> None:
         self._on_response = on_response
-        self._request_queue = None
-        self._response_queue = None
-        self._process = None
+        self._request_queue: Any = None
+        self._response_queue: Any = None
+        self._process: Any = None
         self._reader: threading.Thread | None = None
-        self._ready = None
+        self._ready: Any = None
         self._lock = threading.Lock()
         self._closed = False
 
@@ -302,6 +300,7 @@ class PreviewClient:
     def _read_loop(self) -> None:
         while not self._closed:
             try:
+                assert self._response_queue is not None
                 response = self._response_queue.get(timeout=0.5)
             except Exception:
                 if self._process is None or not self._process.is_alive():

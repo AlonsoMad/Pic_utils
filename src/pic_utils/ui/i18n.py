@@ -49,7 +49,7 @@ class LanguageManager(QObject):
     def __init__(self, settings: Settings, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._settings = settings
-        self._translator = None
+        self._translator: QTranslator | None = None
         self._code = "en"
         self.set_language(settings.language)
 
@@ -78,7 +78,7 @@ class LanguageManager(QObject):
             self.language_changed.emit(code)
 
     @staticmethod
-    def _install(code: str) -> object | None:
+    def _install(code: str) -> QTranslator | None:
         """Load and install ``pic_utils_<code>.qm``; return the translator."""
         app = QCoreApplication.instance()
         if app is None:

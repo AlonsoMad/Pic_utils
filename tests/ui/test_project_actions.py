@@ -110,9 +110,7 @@ class TestProjectIO:
 
     def test_newer_version_rejected(self, tmp_path: Path) -> None:
         path = tmp_path / "future.puproject"
-        path.write_text(
-            json.dumps({"format": PROJECT_FORMAT, "version": 99}), encoding="utf-8"
-        )
+        path.write_text(json.dumps({"format": PROJECT_FORMAT, "version": 99}), encoding="utf-8")
         with pytest.raises(ProjectFileError, match="version"):
             load_project(path)
 
@@ -136,9 +134,7 @@ class TestProjectIO:
 
 
 class TestProjectActions:
-    def test_load_emits_project(
-        self, tmp_path: Path, project_data: ProjectData
-    ) -> None:
+    def test_load_emits_project(self, tmp_path: Path, project_data: ProjectData) -> None:
         from pic_utils.ui.lab.project_actions import ProjectActions
 
         path = tmp_path / "p.puproject"

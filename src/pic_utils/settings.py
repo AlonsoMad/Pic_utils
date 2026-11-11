@@ -190,7 +190,7 @@ class Settings(QObject):
 
     def _int(self, key: str, default: int, low: int, high: int) -> int:
         try:
-            value = int(self._value(key, default))  # type: ignore[arg-type]
+            value = int(self._value(key, default))  # type: ignore[call-overload]
         except (TypeError, ValueError):
             return default
         return max(low, min(high, value))

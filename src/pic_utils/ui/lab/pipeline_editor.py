@@ -10,6 +10,7 @@ launch-relevant actions while any error exists.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import (
@@ -17,6 +18,7 @@ from PySide6.QtCore import (
     QMimeData,
     QModelIndex,
     QObject,
+    QPersistentModelIndex,
     Qt,
     Signal,
 )
@@ -98,12 +100,16 @@ class PipelineModel(QAbstractListModel):
 
     # --- QAbstractListModel ------------------------------------------------------
 
-    def rowCount(self, parent: QModelIndex | None = None) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         if parent is not None and parent.isValid():
             return 0
         return len(self._steps)
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
         if not 0 <= index.row() < len(self._steps):
             return None
         step = self._steps[index.row()]
@@ -126,7 +132,7 @@ class PipelineModel(QAbstractListModel):
             return None
         return None
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
         base = super().flags(index)
         if index.isValid():
             return base | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled
@@ -138,7 +144,7 @@ class PipelineModel(QAbstractListModel):
     def mimeTypes(self) -> list[str]:
         return [_MIME_TYPE]
 
-    def mimeData(self, indexes: list) -> QMimeData | None:
+    def mimeData(self, indexes: Sequence[QModelIndex]) -> QMimeData | None:  # type: ignore[override]
         rows = sorted(index.row() for index in indexes if index.isValid())
         if not rows:
             return None
@@ -152,7 +158,7 @@ class PipelineModel(QAbstractListModel):
         action: Qt.DropAction,
         row: int,
         _column: int,
-        _parent: QModelIndex,
+        _parent: QModelIndex | QPersistentModelIndex,
     ) -> bool:
         """Reorder on drop; returns False so the view skips its own removal.
 
@@ -161,7 +167,7 @@ class PipelineModel(QAbstractListModel):
         """
         if action != Qt.DropAction.MoveAction:
             return False
-        raw = bytes(data.data(_MIME_TYPE)).decode("ascii", errors="ignore")
+        raw = bytes(data.data(_MIME_TYPE).data()).decode("ascii", errors="ignore")
         if not raw:
             return False
         try:
@@ -214,7 +220,7 @@ class PipelineModel(QAbstractListModel):
         self.beginMoveRows(QModelIndex(), from_index, from_index, QModelIndex(), target)
         steps = list(self._steps)
         step = steps.pop(from_index)
-        steps.insert(to_index if to_index < from_index else to_index, step)
+        steps.insert(to_index, step)
         self._steps = tuple(steps)
         self.endMoveRows()
         self._validate()
@@ -245,7 +251,10 @@ class PipelineModel(QAbstractListModel):
         self._replace(
             index,
             PipelineStep(
-                id=step_id, block=step.block, params=params, bypass=step.bypass,
+                id=step_id,
+                block=step.block,
+                params=params,
+                bypass=step.bypass,
                 mask_bindings=dict(step.mask_bindings),
             ),
         )
@@ -263,7 +272,10 @@ class PipelineModel(QAbstractListModel):
         self._replace(
             index,
             PipelineStep(
-                id=step_id, block=step.block, params=params, bypass=step.bypass,
+                id=step_id,
+                block=step.block,
+                params=params,
+                bypass=step.bypass,
                 mask_bindings=dict(step.mask_bindings),
             ),
         )
@@ -283,7 +295,10 @@ class PipelineModel(QAbstractListModel):
         self._replace(
             index,
             PipelineStep(
-                id=step_id, block=step.block, params=dict(step.params), bypass=step.bypass,
+                id=step_id,
+                block=step.block,
+                params=dict(step.params),
+                bypass=step.bypass,
                 mask_bindings=bindings,
             ),
         )
@@ -441,7 +456,9 @@ class PipelineEditorPanel(QWidget):
     def _toggle_bypass(self) -> None:
         step_id = self.current_step_id()
         if step_id:
-            self._stack.push(BypassStepCommand(self._model, step_id, self._bypass_button.isChecked()))
+            self._stack.push(
+                BypassStepCommand(self._model, step_id, self._bypass_button.isChecked())
+            )
 
     def _move(self, delta: int) -> None:
         index = self._view.currentIndex()

@@ -21,7 +21,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pic_utils.blocks.api import Choice, FloatRange, IntRange, OutputKind, ParamKind
+from pic_utils.blocks.api import (
+    Choice,
+    FloatRange,
+    IntRange,
+    OutputKind,
+    ParamDef,
+    ParamKind,
+)
+from pic_utils.pipeline.model import PipelineStep
 from pic_utils.ui.lab.commands import SetMaskBindingCommand, SetParamCommand
 from pic_utils.ui.widgets.param_widgets import make_param_widget
 
@@ -105,9 +113,7 @@ class ParameterPanel(QWidget):
             elif mode == "sample":
                 sampled.append((step_id, param))
 
-    def set_vary_state(
-        self, state: dict[tuple[str, str], tuple[VaryMode, Any]]
-    ) -> None:
+    def set_vary_state(self, state: dict[tuple[str, str], tuple[VaryMode, Any]]) -> None:
         """Replace the vary selections (project load, §17.1)."""
         self._vary_state = dict(state)
 
@@ -134,12 +140,12 @@ class ParameterPanel(QWidget):
                 continue  # chain input / second image: injected by the executor
             self._form.addRow(self._label(param), self._field(param, step))
 
-    def _label(self, param: object) -> QLabel:
+    def _label(self, param: ParamDef) -> QLabel:
         label = QLabel(str(param.name))
         label.setToolTip(str(param.name))
         return label
 
-    def _field(self, param: object, step: object) -> QWidget:
+    def _field(self, param: ParamDef, step: PipelineStep) -> QWidget:
         container = QWidget(self)
         row = QHBoxLayout(container)
         row.setContentsMargins(0, 0, 0, 0)
@@ -169,7 +175,7 @@ class ParameterPanel(QWidget):
         if param.kind in _SAMPLEABLE:
             vary = QComboBox(self)
             vary.addItems(list(_VARY_MODES))
-            mode = self._vary_state.get((self._step_id, param.name), ("fixed", None))[0]
+            mode = self._vary_state.get((self._step_id or "", param.name), ("fixed", None))[0]
             vary.setCurrentText(mode)
             vary.currentTextChanged.connect(
                 lambda mode_, param_name=param.name: self._on_vary_changed(param_name, mode_)

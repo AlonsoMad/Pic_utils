@@ -9,8 +9,9 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QLabel, QSplitter
 
-from pic_utils.pipeline.model import Pipeline, RunConfig
+from pic_utils.pipeline.model import Pipeline, RunConfig, SweepAxis
 from pic_utils.ui.lab.page import LabPage
+from pic_utils.ui.lab.project_actions import ProjectData
 
 
 @pytest.fixture
@@ -51,6 +52,11 @@ class TestComposition:
     def test_run_controls_exposed_for_shell(self, page: LabPage) -> None:
         assert page.run_controls() is not None
 
+    def test_all_panels_retranslate(self, page: LabPage) -> None:
+        page.retranslate()
+        assert page.library()._search.placeholderText()
+        assert page.results_grid()._show_discarded.text()
+
 
 class TestWiring:
     def test_library_activation_adds_step(self, page: LabPage) -> None:
@@ -62,9 +68,7 @@ class TestWiring:
         page.editor().step_selected.emit(step_id)
         assert page.parameters().selected_step_id() == step_id
 
-    def test_plan_count_updates_on_pipeline_change(
-        self, page: LabPage, image_png: Path
-    ) -> None:
+    def test_plan_count_updates_on_pipeline_change(self, page: LabPage, image_png: Path) -> None:
         page.run_controls().add_sources([image_png])
         page.editor().add_block("channel_mask")
         assert "1" in page.run_controls()._plan_count.text()
@@ -111,6 +115,10 @@ class TestWiring:
         page._on_result_ready(record)
         assert page.results_grid().model().rowCount() == 1
 
+    def test_memory_updates(self, page: LabPage) -> None:
+        page._service.memory_updated.emit(2048)
+        assert "2048" in page.run_controls()._memory.text()
+
 
 class TestProjectGlue:
     def test_project_data_round_trip(self, page: LabPage, image_png: Path) -> None:
@@ -121,15 +129,11 @@ class TestProjectGlue:
         assert data.pipeline.steps[0].block == "channel_mask"
 
     def test_load_project_data_applies(self, page: LabPage, image_png: Path) -> None:
-        from pic_utils.ui.lab.project_actions import ProjectData
-
         page.load_project_data(
             ProjectData(
                 sources=(image_png,),
                 second_image=None,
-                pipeline=Pipeline.from_dict(
-                    {"steps": [{"id": "s", "block": "channel_permute"}]}
-                ),
+                pipeline=Pipeline.from_dict({"steps": [{"id": "s", "block": "channel_permute"}]}),
                 run=RunConfig(mode="grid", batch_size=16, master_seed=3),
             )
         )
@@ -137,17 +141,29 @@ class TestProjectGlue:
         assert page.run_controls().all_sources() == [image_png]
         assert page.run_controls().run_config().batch_size == 16
 
+    def test_load_project_sets_vary_state(self, page: LabPage, image_png: Path) -> None:
+        page.load_project_data(
+            ProjectData(
+                sources=(image_png,),
+                second_image=None,
+                pipeline=Pipeline.from_dict({"steps": [{"id": "s", "block": "channel_mask"}]}),
+                run=RunConfig(
+                    mode="grid",
+                    axes=(SweepAxis(step_id="s", param="low", values=(10, 20)),),
+                ),
+            )
+        )
+        state = page.parameters().vary_state()
+        assert ("s", "low") in state
+        assert state[("s", "low")][0] == "sweep"
+
 
 class TestPreviewWiring:
-    def test_pipeline_change_requests_preview(
-        self, page: LabPage, image_png: Path
-    ) -> None:
+    def test_pipeline_change_requests_preview(self, page: LabPage, image_png: Path) -> None:
         page.run_controls().add_sources([image_png])
         page._on_pipeline_changed()
         assert page.preview_pane()._source == str(image_png)
 
-    def test_registry_reload_restarts_preview(
-        self, page: LabPage, qtbot: object
-    ) -> None:
+    def test_registry_reload_restarts_preview(self, page: LabPage, qtbot: object) -> None:
         page._registry.reload()
         qtbot.wait(50)  # type: ignore[attr-defined]

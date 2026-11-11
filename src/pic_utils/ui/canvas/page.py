@@ -71,6 +71,7 @@ class CanvasPage(QWidget):
 
     def _replace(self, placeholder: QWidget, widget: QWidget) -> None:
         parent = placeholder.parentWidget()
+        assert isinstance(parent, QSplitter)
         assert parent is not None, "placeholder must be in the layout"
         index = parent.indexOf(placeholder)
         stretch = parent.stretchFactor(placeholder) if hasattr(parent, "stretchFactor") else 0

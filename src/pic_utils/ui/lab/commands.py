@@ -114,9 +114,7 @@ class BypassStepCommand(QUndoCommand):
 class SetParamCommand(QUndoCommand):
     """Set one parameter; consecutive edits of the same cell merge (§12)."""
 
-    def __init__(
-        self, model: PipelineModel, step_id: str, param: str, value: Any
-    ) -> None:
+    def __init__(self, model: PipelineModel, step_id: str, param: str, value: Any) -> None:
         super().__init__()
         self._model = model
         self._step_id = step_id

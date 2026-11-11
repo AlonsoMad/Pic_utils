@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -35,6 +35,11 @@ class ParamWidget(QWidget):
 
     edited = Signal(object)
 
+    def __init__(self, spec: object, definition: ParamDef, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._spec = spec
+        self._definition = definition
+
     def set_value(self, value: Any) -> None:
         """Set the widget's value without emitting :attr:`edited`."""
 
@@ -43,7 +48,7 @@ class _IntWidget(ParamWidget):
     """``QSlider`` + ``QSpinBox`` synced, range/step from ``IntRange`` (§13.4)."""
 
     def __init__(self, spec: IntRange, definition: ParamDef) -> None:
-        super().__init__()
+        super().__init__(spec, definition)
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._spin = QSpinBox()
         self._spin.setRange(spec.min, spec.max)
@@ -79,9 +84,9 @@ class _FloatWidget(ParamWidget):
     """``QDoubleSpinBox`` + slider mapped through the range's step (§13.4)."""
 
     def __init__(self, spec: FloatRange, definition: ParamDef) -> None:
-        super().__init__()
-        self._spec = spec
-        resolution = max(int(round((spec.max - spec.min) / spec.step)), 1)
+        super().__init__(spec, definition)
+        self._range = spec
+        resolution = max(round((spec.max - spec.min) / spec.step), 1)
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, resolution)
         self._spin = QDoubleSpinBox()
@@ -98,7 +103,7 @@ class _FloatWidget(ParamWidget):
         layout.addWidget(self._spin)
 
     def _position(self, value: float) -> int:
-        return round((value - self._spec.min) / self._spec.step)
+        return round((value - self._range.min) / self._range.step)
 
     def _on_spin(self, value: float) -> None:
         self._slider.blockSignals(True)
@@ -119,7 +124,7 @@ class _ChoiceWidget(ParamWidget):
     """``QComboBox`` showing labels when provided (§13.4)."""
 
     def __init__(self, spec: Choice, definition: ParamDef) -> None:
-        super().__init__()
+        super().__init__(spec, definition)
         self._values = list(spec.options)
         self._combo = QComboBox()
         self._combo.addItems([str(option) for option in self._values])
@@ -146,7 +151,7 @@ class _BoolWidget(ParamWidget):
     """``QCheckBox`` (§13.4)."""
 
     def __init__(self, spec: object, definition: ParamDef) -> None:
-        super().__init__()
+        super().__init__(spec, definition)
         self._check = QCheckBox()
         self._check.toggled.connect(self.edited.emit)
         layout = QHBoxLayout(self)
@@ -163,7 +168,7 @@ class _ColorWidget(ParamWidget):
     """Color swatch button opening a ``QColorDialog`` (§13.4)."""
 
     def __init__(self, spec: object, definition: ParamDef) -> None:
-        super().__init__()
+        super().__init__(spec, definition)
         self._swatch = QFrame()
         self._swatch.setFixedSize(20, 20)
         self._swatch.setFrameShape(QFrame.Shape.Box)
@@ -196,7 +201,7 @@ class _SeedWidget(ParamWidget):
     """
 
     def __init__(self, spec: object, definition: ParamDef) -> None:
-        super().__init__()
+        super().__init__(spec, definition)
         self._param_name = definition.name
         self._auto = QCheckBox()
         self._auto.setChecked(True)
@@ -254,15 +259,18 @@ def make_param_widget(definition: ParamDef) -> ParamWidget:
     ``IMAGE``/``MASK`` kinds are injected inputs (chain input, second image,
     mask bindings) and never get a value widget.
     """
+    widget: ParamWidget
     if definition.kind is ParamKind.INT:
         assert isinstance(definition.spec, IntRange)
-        return _IntWidget(definition.spec, definition)
-    if definition.kind is ParamKind.FLOAT:
+        widget = _IntWidget(definition.spec, definition)
+    elif definition.kind is ParamKind.FLOAT:
         assert isinstance(definition.spec, FloatRange)
-        return _FloatWidget(definition.spec, definition)
-    if definition.kind is ParamKind.CHOICE:
+        widget = _FloatWidget(definition.spec, definition)
+    elif definition.kind is ParamKind.CHOICE:
         assert isinstance(definition.spec, Choice)
-        return _ChoiceWidget(definition.spec, definition)
-    if definition.kind not in _KIND_WIDGETS:
+        widget = _ChoiceWidget(definition.spec, definition)
+    elif definition.kind in _KIND_WIDGETS:
+        widget = _KIND_WIDGETS[definition.kind](definition.spec, definition)
+    else:
         raise ValueError(f"parameter kind {definition.kind} has no value widget")
-    return _KIND_WIDGETS[definition.kind](definition.spec, definition)
+    return widget

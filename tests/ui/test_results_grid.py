@@ -27,7 +27,11 @@ def _write_png(path: Path, value: int) -> None:
 @pytest.fixture
 def run(tmp_path: Path) -> RunStore:
     store = RunStore(tmp_path, "20260101-000000-abc123")
-    header = {"created_at": "2026-01-01T00:00:00Z", "app_version": "0.1.0", "pipeline": {"steps": []}}
+    header = {
+        "created_at": "2026-01-01T00:00:00Z",
+        "app_version": "0.1.0",
+        "pipeline": {"steps": []},
+    }
     store.create(header)
     for index in range(3):
         record = ResultRecord(
@@ -117,9 +121,7 @@ class TestModel:
         assert result_file.exists()
         assert run.read_curation()[record.id] == "accepted"
 
-    def test_restore_returns_to_pending(
-        self, grid_model: ResultsGridModel, run: RunStore
-    ) -> None:
+    def test_restore_returns_to_pending(self, grid_model: ResultsGridModel, run: RunStore) -> None:
         record = grid_model._record_at(0)
         assert record is not None
         result_file = run.run_dir / record.path
@@ -187,9 +189,7 @@ class TestGrid:
         grid._on_double_clicked(grid._model.index(0, 0))
         assert seen and seen[0][0] == "0000:00"
 
-    def test_show_discarded_toggle(
-        self, qtbot: object, run: RunStore, trash: SessionTrash
-    ) -> None:
+    def test_show_discarded_toggle(self, qtbot: object, run: RunStore, trash: SessionTrash) -> None:
         grid = ResultsGrid(run, trash)
         qtbot.addWidget(grid)  # type: ignore[attr-defined]
         run.set_curation("0000:00", "discarded")

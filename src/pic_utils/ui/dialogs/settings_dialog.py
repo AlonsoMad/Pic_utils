@@ -44,7 +44,7 @@ def _browse_row(line: QLineEdit, parent: QDialog, title: str) -> QWidget:
 
 
 def _pick_folder(line: QLineEdit, parent: QDialog, title: str) -> None:
-    current = line.text() or None
+    current = line.text() or ""
     chosen = QFileDialog.getExistingDirectory(parent, title, current)
     if chosen:
         line.setText(chosen)
@@ -135,9 +135,7 @@ class SettingsDialog(QDialog):
         runner_box.setLayout(runner_form)
 
         preview_form = QFormLayout()
-        preview_form.addRow(
-            self._label_row(self.tr("Proxy long &side"), self._proxy), self._proxy
-        )
+        preview_form.addRow(self._label_row(self.tr("Proxy long &side"), self._proxy), self._proxy)
         preview_form.addRow(
             self._label_row(self.tr("&Debounce (ms)"), self._debounce), self._debounce
         )
@@ -148,7 +146,9 @@ class SettingsDialog(QDialog):
         general_form.addRow(
             self._label_row(self.tr("&Undo limit"), self._undo_limit), self._undo_limit
         )
-        general_form.addRow(self._label_row(self.tr("&Log level"), self._log_level), self._log_level)
+        general_form.addRow(
+            self._label_row(self.tr("&Log level"), self._log_level), self._log_level
+        )
         general_box = QGroupBox(self.tr("General"))
         general_box.setLayout(general_form)
 

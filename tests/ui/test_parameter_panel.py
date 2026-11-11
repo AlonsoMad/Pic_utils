@@ -41,7 +41,11 @@ def panel(qtbot: object, model: PipelineModel) -> ParameterPanel:
 
 def _param(name: str, kind: ParamKind, default: object, spec: object) -> ParamDef:
     return ParamDef(
-        name=name, kind=kind, annotation=type(default), default=default, required=False,
+        name=name,
+        kind=kind,
+        annotation=type(default),
+        default=default,
+        required=False,
         spec=spec,
     )
 
@@ -122,7 +126,8 @@ class TestParameterPanel:
         step_id = model.add_step("channel_mask")
         panel.show_step(step_id)
         names = {
-            panel._form.itemAt(row, QFormLayout.ItemRole.LabelRole).widget().text() for row in range(panel._form.rowCount())
+            panel._form.itemAt(row, QFormLayout.ItemRole.LabelRole).widget().text()
+            for row in range(panel._form.rowCount())
         }
         assert {"channel", "low", "high", "soft", "invert"} <= names
 
@@ -130,15 +135,14 @@ class TestParameterPanel:
         step_id = model.add_step("double_exposure")
         panel.show_step(step_id)
         names = {
-            panel._form.itemAt(row, QFormLayout.ItemRole.LabelRole).widget().text() for row in range(panel._form.rowCount())
+            panel._form.itemAt(row, QFormLayout.ItemRole.LabelRole).widget().text()
+            for row in range(panel._form.rowCount())
         }
         assert "image" not in names
         assert "second" not in names
         assert "exposure_factor" in names
 
-    def test_edit_pushes_merged_command(
-        self, panel: ParameterPanel, model: PipelineModel
-    ) -> None:
+    def test_edit_pushes_merged_command(self, panel: ParameterPanel, model: PipelineModel) -> None:
         step_id = model.add_step("channel_mask")
         model.set_param(step_id, "low", 5)
         panel.show_step(step_id)
@@ -152,16 +156,16 @@ class TestParameterPanel:
         panel._undo_stack.undo()
         assert model.step(step_id).params["low"] == 5
 
-    def test_mask_row_has_binding_combo(
-        self, panel: ParameterPanel, model: PipelineModel
-    ) -> None:
+    def test_mask_row_has_binding_combo(self, panel: ParameterPanel, model: PipelineModel) -> None:
         mask_id = model.add_step("channel_mask")
         overlay_id = model.add_step("conditional_overlay")
         panel.show_step(overlay_id)
         combos = [
             combo
             for row in range(panel._form.rowCount())
-            for combo in panel._form.itemAt(row, QFormLayout.ItemRole.FieldRole).widget().findChildren(QComboBox)
+            for combo in panel._form.itemAt(row, QFormLayout.ItemRole.FieldRole)
+            .widget()
+            .findChildren(QComboBox)
         ]
         assert combos, "the mask parameter row carries a binding combo"
         items = [combos[0].itemText(i) for i in range(combos[0].count())]
@@ -172,9 +176,7 @@ class TestParameterPanel:
         }
         assert "mask" in labels
 
-    def test_mask_binding_pushes_command(
-        self, panel: ParameterPanel, model: PipelineModel
-    ) -> None:
+    def test_mask_binding_pushes_command(self, panel: ParameterPanel, model: PipelineModel) -> None:
         mask_id = model.add_step("channel_mask")
         overlay_id = model.add_step("conditional_overlay")
         panel.show_step(overlay_id)
@@ -204,9 +206,7 @@ class TestParameterPanel:
         panel.show_step(step_id)
         assert panel._sweep_payload("low") == (0, 255)
 
-    def test_vary_payload_for_choice(
-        self, panel: ParameterPanel, model: PipelineModel
-    ) -> None:
+    def test_vary_payload_for_choice(self, panel: ParameterPanel, model: PipelineModel) -> None:
         step_id = model.add_step("channel_mask")
         panel.show_step(step_id)
         assert panel._sweep_payload("channel") == ("R", "G", "B", "L")

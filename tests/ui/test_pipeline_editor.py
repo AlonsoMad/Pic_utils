@@ -7,11 +7,10 @@ from PySide6.QtCore import QMimeData, QModelIndex, Qt
 from PySide6.QtGui import QUndoStack
 
 from pic_utils.blocks.registry import BlockRegistry
-from pic_utils.pipeline.model import Pipeline, PipelineStep
+from pic_utils.pipeline.model import Pipeline
 from pic_utils.ui.lab.commands import (
     AddStepCommand,
     BypassStepCommand,
-    LoadPipelineCommand,
     MoveStepCommand,
     RemoveStepCommand,
     SetMaskBindingCommand,

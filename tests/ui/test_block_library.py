@@ -15,20 +15,25 @@ from pic_utils.ui.lab.block_library import (
     BlockLibraryProxy,
 )
 
-USER_BLOCK_OK = '''
+USER_BLOCK_OK = """
 from typing import Annotated
 
 from pic_utils.blocks import IntRange, OutputKind, block
 from pic_utils.core.image import Image
 
 
-@block(name="user_sharpen", category="sharpen", description="Unsharp mask.", output=OutputKind.IMAGE)
+@block(
+    name="user_sharpen",
+    category="sharpen",
+    description="Unsharp mask.",
+    output=OutputKind.IMAGE,
+)
 def user_sharpen(
     image: Image,
     amount: Annotated[int, IntRange(0, 100, step=1)] = 50,
 ) -> Image:
     return image
-'''
+"""
 
 USER_BLOCK_BROKEN = "this is not python ("
 
@@ -52,7 +57,8 @@ class TestModel:
     def test_lists_all_blocks_sorted(self, registry: BlockRegistry) -> None:
         model = BlockLibraryModel(registry)
         names = [
-            model.data(model.index(row, 0), Qt.ItemDataRole.DisplayRole) for row in range(model.rowCount())
+            model.data(model.index(row, 0), Qt.ItemDataRole.DisplayRole)
+            for row in range(model.rowCount())
         ]
         assert names == sorted(names)
         assert "user_sharpen" in names
@@ -108,9 +114,7 @@ class TestProxy:
 
 
 class TestPanel:
-    def test_activation_emits_block_name(
-        self, panel: BlockLibraryPanel, qtbot: object
-    ) -> None:
+    def test_activation_emits_block_name(self, panel: BlockLibraryPanel, qtbot: object) -> None:
         seen: list[str] = []
         panel.block_activated.connect(seen.append)
         proxy = panel._proxy
@@ -156,7 +160,9 @@ class TestPanel:
         panel.reload_now()
         assert len(reports) == 1  # still only the original report
 
-    def test_auto_reload_watches_user_dir(self, panel: BlockLibraryPanel, registry: BlockRegistry) -> None:
+    def test_auto_reload_watches_user_dir(
+        self, panel: BlockLibraryPanel, registry: BlockRegistry
+    ) -> None:
         assert panel._watcher.directories() == [str(registry.user_blocks_dir)]
         panel.set_auto_reload(False)
         assert panel._watcher.directories() == []

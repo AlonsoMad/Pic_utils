@@ -62,8 +62,10 @@ def test_lab_journey_end_to_end(
     # 3. preview: the debounced render returns a pixmap.
     page._on_pipeline_changed()
     qtbot.waitUntil(  # type: ignore[attr-defined]
-        lambda: page.preview_pane()._image.pixmap() is not None
-        and not page.preview_pane()._image.pixmap().isNull(),
+        lambda: (
+            page.preview_pane()._image.pixmap() is not None
+            and not page.preview_pane()._image.pixmap().isNull()
+        ),
         timeout=30_000,
     )
 

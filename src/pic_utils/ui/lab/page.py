@@ -10,6 +10,7 @@ controls' plan count reads the editor's pipeline through the live snapshot.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget

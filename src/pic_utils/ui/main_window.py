@@ -194,11 +194,13 @@ class MainWindow(QMainWindow):
 
     def diagnostics_text(self) -> str:
         """App version, platform, and dependency versions for bug reports."""
+        instance = QApplication.instance()
+        qt_version = instance.property("qt_version") if instance is not None else "?"
         return "\n".join(
             [
                 f"Pic Utils {__version__}",
                 f"Python {platform.python_version()} on {platform.platform()}",
-                f"Qt {QApplication.instance().property('qt_version') if QApplication.instance() else '?'}",
+                f"Qt {qt_version}",
                 f"Log: {logs_dir() / 'app.log'}",
             ]
         )
