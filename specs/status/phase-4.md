@@ -39,8 +39,8 @@ $ uv run pytest tests/pipeline
 120 passed in 1.94s
 ```
 
-CI: GitHub Actions run on `main` (`ubuntu-latest`, `windows-latest`;
-Python 3.12) — recorded below after the run completes.
+CI: GitHub Actions run `42975818322` on `main` completed successfully
+(`ubuntu-latest` 31s, `windows-latest` 42s; Python 3.12).
 
 ## Acceptance checklist
 
