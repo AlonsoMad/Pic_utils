@@ -30,14 +30,11 @@ def _resolve(language: str) -> str:
 
 
 def retranslate_tree(widget: QWidget) -> None:
-    """Call ``retranslate()`` on ``widget`` and every widget child, depth-first.
+    """Call ``retranslate()`` on every widget child, depth-first.
 
-    A page composed of panels does not need to forward the language signal to
-    each child by hand: the shell calls this once per switch.
+    The passed widget's own ``retranslate()`` is NOT called — the caller does
+    that (calling it here would recurse when a page delegates to this helper).
     """
-    retranslate = getattr(widget, "retranslate", None)
-    if callable(retranslate):
-        retranslate()
     for child in widget.findChildren(QWidget):
         retranslate = getattr(child, "retranslate", None)
         if callable(retranslate):

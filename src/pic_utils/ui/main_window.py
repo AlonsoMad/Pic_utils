@@ -56,11 +56,18 @@ class MainWindow(QMainWindow):
         self._settings = settings
         self._languages = languages
 
-        self._lab_page = LabPage()
+        self._lab_page = LabPage(settings)
         self._canvas_page = CanvasPage()
         self._stack = QStackedWidget(self)
         self._stack.addWidget(self._lab_page)
         self._stack.addWidget(self._canvas_page)
+
+        # Lab glue: project open, blocks reload, run progress (P5-10).
+        self.project_open_requested.connect(self._lab_page.open_project)
+        self.blocks_reload_requested.connect(self._lab_page.library().reload_now)
+        self._lab_page.notify.connect(self.statusBar().showMessage)
+        self._lab_page.launch_requested.connect(self._on_launch_requested)
+        self.set_run_controls(self._lab_page.run_controls())
 
         self._progress = QProgressBar(self)
         self._progress.hide()
@@ -144,6 +151,14 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentWidget(self._lab_page)
         else:
             self._stack.setCurrentWidget(self._canvas_page)
+
+    # --- run progress (FR-UI-05) ----------------------------------------------
+
+    def _on_launch_requested(self, request: object) -> None:
+        """Show progress while a batch runs (FR-UI-05)."""
+        self._progress.setRange(0, 1)
+        self._progress.setValue(0)
+        self._progress.show()
 
     # --- injected panels (stable layout API) -----------------------------------
 

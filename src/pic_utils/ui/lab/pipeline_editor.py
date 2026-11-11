@@ -132,10 +132,10 @@ class PipelineModel(QAbstractListModel):
             return base | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled
         return base | Qt.ItemFlag.ItemIsDropEnabled
 
-    def supportedDropActions(self) -> Qt.DropAction:  # noqa: N802 - Qt API
+    def supportedDropActions(self) -> Qt.DropAction:
         return Qt.DropAction.MoveAction
 
-    def mimeTypes(self) -> list[str]:  # noqa: N802 - Qt API
+    def mimeTypes(self) -> list[str]:
         return [_MIME_TYPE]
 
     def mimeData(self, indexes: list) -> QMimeData | None:
@@ -408,6 +408,9 @@ class PipelineEditorPanel(QWidget):
 
     def undo_stack(self) -> QUndoStack:
         return self._stack
+
+    def model(self) -> PipelineModel:
+        return self._model
 
     def add_block(self, block_name: str) -> None:
         """Add a block (library activation); undoable."""

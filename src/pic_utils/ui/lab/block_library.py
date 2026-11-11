@@ -17,11 +17,11 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     QSortFilterProxyModel,
-    QTimer,
     Qt,
+    QTimer,
     Signal,
 )
-from PySide6.QtWidgets import QComboBox, QListView, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QLineEdit, QListView, QPushButton, QVBoxLayout, QWidget
 
 from pic_utils.blocks.api import BlockDef, BlockLoadError
 from pic_utils.blocks.registry import BlockRegistry, ReloadReport

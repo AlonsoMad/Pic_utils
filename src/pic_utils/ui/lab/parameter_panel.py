@@ -105,6 +105,12 @@ class ParameterPanel(QWidget):
             elif mode == "sample":
                 sampled.append((step_id, param))
 
+    def set_vary_state(
+        self, state: dict[tuple[str, str], tuple[VaryMode, Any]]
+    ) -> None:
+        """Replace the vary selections (project load, §17.1)."""
+        self._vary_state = dict(state)
+
     def retranslate(self) -> None:
         """Set every user-visible string (§15)."""
         self._empty.setText(self.tr("Select a step to edit its parameters"))

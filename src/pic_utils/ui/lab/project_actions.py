@@ -26,11 +26,11 @@ from pic_utils.ui.dialogs.relink_dialog import RelinkDialog
 __all__ = [
     "CANVAS_SUFFIX",
     "IMAGE_SUFFIXES",
+    "PRESET_FORMAT",
     "PROJECT_FORMAT",
     "PROJECT_SUFFIX",
-    "PRESET_FORMAT",
-    "ProjectData",
     "ProjectActions",
+    "ProjectData",
     "load_preset",
     "missing_files",
     "preset_names",

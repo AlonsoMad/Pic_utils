@@ -21,7 +21,14 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QListView, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QListView,
+    QVBoxLayout,
+    QWidget,
+)
 
 from pic_utils.results.trash import SessionTrash
 from pic_utils.runner.manifest import ResultRecord, RunStore
@@ -93,12 +100,34 @@ class ResultsGridModel(QAbstractListModel):
 
     # --- data ----------------------------------------------------------------
 
+    def bind_run(self, store: RunStore) -> None:
+        """Point the model at a different run (the run selector, §13.1)."""
+        self._store = store
+        self._pixmaps.clear()
+        self._pending.clear()
+        self.reload()
+
+    @property
+    def store(self) -> RunStore:
+        return self._store
+
+    def append_result(self, record: ResultRecord) -> None:
+        """Append one live result during a run (streaming, §9.4)."""
+        row = len(self._visible_records())
+        self.beginInsertRows(QModelIndex(), row, row)
+        self._records.append(record)
+        self.endInsertRows()
+
     def reload(self) -> None:
-        """Re-read the run from disk."""
+        """Re-read the run from disk; a missing run shows as empty."""
         self.beginResetModel()
-        data = self._store.read()
-        self._records = list(data.results)
-        self._curation = dict(data.curation)
+        if not self._store.manifest_path.is_file():
+            self._records = []
+            self._curation = {}
+        else:
+            data = self._store.read()
+            self._records = list(data.results)
+            self._curation = dict(data.curation)
         self.endResetModel()
         self.curation_changed.emit()
 
@@ -220,8 +249,8 @@ class ResultsGrid(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._store = store
         self._model = ResultsGridModel(store, trash, self)
-
         self._view = QListView(self)
         self._view.setModel(self._model)
         self._view.setViewMode(QListView.ViewMode.IconMode)
@@ -230,8 +259,20 @@ class ResultsGrid(QWidget):
         self._view.setSpacing(6)
         self._view.doubleClicked.connect(self._on_double_clicked)
 
+        # Run selector + discarded toggle (§13.1).
+        self._run_selector = QComboBox(self)
+        self._run_selector.addItem(str(store.run_id))
+        self._run_selector.currentTextChanged.connect(self._on_run_selected)
+        self._show_discarded = QCheckBox(self)
+        self._show_discarded.toggled.connect(self._model.set_show_discarded)
+
+        options = QHBoxLayout()
+        options.addWidget(self._run_selector, 1)
+        options.addWidget(self._show_discarded)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(options)
         layout.addWidget(self._view)
 
         self._view.activated.connect(self._on_double_clicked)
@@ -240,6 +281,56 @@ class ResultsGrid(QWidget):
 
     def model(self) -> ResultsGridModel:
         return self._model
+
+    def set_runs(self, run_ids: list[str], current: str) -> None:
+        """Populate the run selector; ``current`` is selected (§13.1)."""
+        self._run_selector.blockSignals(True)
+        self._run_selector.clear()
+        self._run_selector.addItems(run_ids)
+        index = self._run_selector.findText(current)
+        self._run_selector.setCurrentIndex(max(index, 0))
+        self._run_selector.blockSignals(False)
+        self._on_run_selected(current)
+
+    def current_run_id(self) -> str:
+        return self._run_selector.currentText()
+
+    def bind_run(self, store: RunStore) -> None:
+        """Point the grid at a run and select it (§13.1 run selector)."""
+        self._store = store
+        runs = [self._run_selector.itemText(i) for i in range(self._run_selector.count())]
+        if store.run_id not in runs:
+            self._run_selector.addItem(store.run_id)
+        self._run_selector.setCurrentText(store.run_id)
+        self._model.bind_run(store)
+
+    def refresh_runs(self) -> None:
+        """Re-scan the results root for runs with a manifest (§9.1)."""
+        run_ids = sorted(
+            (
+                child.name
+                for child in self._store.results_root.iterdir()
+                if child.is_dir() and (child / "manifest.json").is_file()
+            ),
+            reverse=True,
+        )
+        current = self._run_selector.currentText()
+        self._run_selector.blockSignals(True)
+        self._run_selector.clear()
+        self._run_selector.addItems(run_ids)
+        index = self._run_selector.findText(current)
+        self._run_selector.setCurrentIndex(max(index, 0))
+        self._run_selector.blockSignals(False)
+        if index < 0 and run_ids:
+            self._on_run_selected(run_ids[0])
+
+    def retranslate(self) -> None:
+        """Set every user-visible string (§15)."""
+        self._show_discarded.setText(self.tr("Show discarded"))
+
+    def _on_run_selected(self, run_id: str) -> None:
+        """Bind the model to the selected run (§13.1 run selector)."""
+        self._model.bind_run(RunStore(self._store.results_root, run_id))
 
     def current_record(self) -> ResultRecord | None:
         index = self._view.currentIndex()

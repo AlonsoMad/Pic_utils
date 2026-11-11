@@ -155,6 +155,20 @@ class RunControls(QWidget):
     def second_image(self) -> Path | None:
         return self._second
 
+    def set_second_image(self, path: Path | None) -> None:
+        """Set (or clear) the second image (project load)."""
+        self._second = path
+        self._update_second_label()
+        self._refresh_plan_count()
+        self.sources_changed.emit()
+
+    def apply_run_config(self, config: RunConfig) -> None:
+        """Apply a run configuration (project load, §17.1)."""
+        self._mode.setCurrentText(config.mode)
+        self._batch_size.setValue(config.batch_size)
+        self._random_samples.setValue(config.random_samples)
+        self._master_seed.setValue(config.master_seed)
+
     def run_config(self) -> RunConfig:
         """The current run configuration (§7.1); axes come from the panel."""
         return RunConfig(
@@ -195,6 +209,13 @@ class RunControls(QWidget):
 
     def set_memory_mb(self, total_mb: int) -> None:
         self._memory.setText(f"{total_mb} MiB")
+
+    def clear_sources(self) -> None:
+        """Remove every source (project load replaces the list)."""
+        self._sources.clear()
+        self._source_list.clear()
+        self._refresh_plan_count()
+        self.sources_changed.emit()
 
     def add_sources(self, paths: list) -> None:
         """Add sources (drag-and-drop or dialog); skips duplicates."""
@@ -280,6 +301,10 @@ class RunControls(QWidget):
         if self._plan_count.text().startswith("—"):
             return
         self.launch_requested.emit(self.run_config())
+
+    def refresh_plan_count(self) -> None:
+        """Recompute the plan count (pipeline/config changed, P5-10)."""
+        self._refresh_plan_count()
 
     def _refresh_plan_count(self) -> None:
         count = self._plan_count_provider(self.run_config())
