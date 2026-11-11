@@ -11,6 +11,7 @@ code from :mod:`pic_utils.core.errors`, e.g. ``block.raised`` or
 from __future__ import annotations
 
 import math
+import queue
 from dataclasses import dataclass
 from typing import Literal
 
@@ -23,6 +24,7 @@ __all__ = [
     "ImageHandle",
     "ResultFile",
     "WorkerEvent",
+    "WorkerInit",
     "WorkerLog",
     "WorkerReady",
 ]
@@ -86,6 +88,22 @@ class ExperimentOutcome:
     results: tuple[ResultFile, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class WorkerInit:
+    """Everything a worker needs before its first task (§8.2).
+
+    Defined here (not in ``pool.py``) so the worker never imports the pool:
+    the dependency direction is worker → protocol, and the pool is free to
+    grow Qt-adjacent machinery without dragging it into spawned processes.
+    """
+
+    event_queue: queue.Queue[WorkerEvent]  # multiprocessing.Queue (spawn context)
+    blocks_dir: str | None  # <run_dir>/blocks
+    run_dir: str
+    block_snapshot_hash: str
+    log_level: str
+
+
 # --- Event-queue records (§8.2) ----------------------------------------------
 #
 # Workers report readiness and experiment starts through a
@@ -111,12 +129,17 @@ class ExperimentStarted:
 
 @dataclass(frozen=True, slots=True)
 class WorkerLog:
-    """A log record routed through the event queue; the parent writes it."""
+    """A log record routed through the event queue; the parent writes it.
+
+    ``traceback`` carries the formatted exception (§18.3: full tracebacks to
+    ``run.log``); ``None`` when the record has no exception info.
+    """
 
     pid: int
     level: int
     logger_name: str
     message: str
+    traceback: str | None = None
 
 
 WorkerEvent = WorkerReady | ExperimentStarted | WorkerLog

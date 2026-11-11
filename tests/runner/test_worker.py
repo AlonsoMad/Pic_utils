@@ -27,10 +27,11 @@ from pic_utils.runner.protocol import (
     ExperimentStarted,
     ExperimentTask,
     WorkerEvent,
+    WorkerInit,
     WorkerReady,
 )
 from pic_utils.runner.shm import SharedImageStore
-from pic_utils.runner.worker import WorkerInit, init_worker, run_experiment
+from pic_utils.runner.worker import init_worker, run_experiment
 
 _TEST_BLOCKS = '''"""Synthetic test blocks: invert, raise, invalid output, two layers."""
 

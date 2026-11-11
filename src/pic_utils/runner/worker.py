@@ -21,6 +21,9 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
+from typing import TYPE_CHECKING
+
+import psutil  # type: ignore[import-untyped]  # psutil ships no py.typed; types-psutil is not an approved dependency
 
 from pic_utils.blocks import builtin as builtin_package
 from pic_utils.blocks.api import BlockDef, BlockLoadError
@@ -30,6 +33,7 @@ from pic_utils.core.errors import (
     BLOCK_RAISED,
     BLOCK_SNAPSHOT_MISMATCH,
     IO_WRITE,
+    MEMORY_LIMIT,
     BlockError,
     ExportError,
     InvalidBlockOutput,
@@ -39,12 +43,14 @@ from pic_utils.io.saver import save_image
 from pic_utils.pipeline.execute import execute_pipeline
 from pic_utils.pipeline.model import Pipeline
 from pic_utils.runner.manifest import RunStore
+from pic_utils.runner.memory import MemoryGuard
 from pic_utils.runner.protocol import (
     ExperimentOutcome,
     ExperimentStarted,
     ExperimentTask,
     ResultFile,
     WorkerEvent,
+    WorkerInit,
     WorkerLog,
     WorkerReady,
 )
@@ -53,22 +59,11 @@ from pic_utils.runner.shm import attach_image
 logger = logging.getLogger(__name__)
 
 _THUMB_LONG_SIDE = 256
+_MIB = 1024 * 1024
 
-
-@dataclass(frozen=True, slots=True)
-class WorkerInit:
-    """Everything a worker needs before its first task (§8.2).
-
-    Defined here (not in ``pool.py``) so the worker never imports the pool:
-    the dependency direction is worker → protocol, and the pool is free to
-    grow Qt-adjacent machinery without dragging it into spawned processes.
-    """
-
-    event_queue: queue.Queue[WorkerEvent]  # multiprocessing.Queue (spawn context)
-    blocks_dir: str | None  # <run_dir>/blocks
-    run_dir: str
-    block_snapshot_hash: str
-    log_level: str
+if TYPE_CHECKING:
+    # blocks/registry.py imports Qt; the type reference is compile-time only.
+    from pic_utils.blocks.registry import BlockSnapshot
 
 
 _worker_snapshot: _WorkerSnapshot | None = None
@@ -115,12 +110,16 @@ class _QueueLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            traceback_text = None
+            if record.exc_info is not None or record.exc_text is not None:
+                traceback_text = self.format(record)
             self._events.put_nowait(
                 WorkerLog(
                     pid=self._pid,
                     level=record.levelno,
                     logger_name=record.name,
                     message=record.getMessage(),
+                    traceback=traceback_text,
                 )
             )
         except Exception:  # pragma: no cover - logging must never raise
@@ -252,7 +251,30 @@ def run_experiment(task: ExperimentTask) -> ExperimentOutcome:
         # _WorkerSnapshot mirrors BlockSnapshot field-for-field; the real
         # class lives in blocks/registry.py, which imports Qt and therefore
         # cannot be imported here (§1.3: worker code must not import Qt).
-        output = execute_pipeline(pipeline, _worker_snapshot, source, second, task.experiment)  # type: ignore[arg-type]
+        snapshot: BlockSnapshot = _worker_snapshot  # type: ignore[assignment]
+        # §8.6: a worker aborts with memory.limit when the OS has less
+        # available memory than the experiment's estimate.
+        estimate_mb = MemoryGuard().estimate_experiment_mb(source, pipeline, snapshot)
+        available = psutil.virtual_memory().available
+        if available < estimate_mb * _MIB:
+            logger.warning(
+                "experiment %s aborted: %.0f MiB available, %d MiB estimated",
+                task.experiment.index,
+                available / _MIB,
+                estimate_mb,
+            )
+            return ExperimentOutcome(
+                experiment_index=task.experiment.index,
+                status="failed",
+                error_code=MEMORY_LIMIT,
+                error_message=(
+                    f"not enough available memory: {available // _MIB} MiB free, "
+                    f"{estimate_mb} MiB estimated"
+                ),
+                elapsed_ms=_elapsed_ms(started),
+                results=(),
+            )
+        output = execute_pipeline(pipeline, snapshot, source, second, task.experiment)
     except InvalidBlockOutput as error:
         logger.exception("experiment %s failed: invalid block output", task.experiment.index)
         return ExperimentOutcome(
