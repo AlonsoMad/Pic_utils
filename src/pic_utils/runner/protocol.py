@@ -11,13 +11,13 @@ code from :mod:`pic_utils.core.errors`, e.g. ``block.raised`` or
 from __future__ import annotations
 
 import math
-import queue
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 from pic_utils.pipeline.model import ExperimentSpec
 
 __all__ = [
+    "EventQueue",
     "ExperimentOutcome",
     "ExperimentStarted",
     "ExperimentTask",
@@ -88,6 +88,17 @@ class ExperimentOutcome:
     results: tuple[ResultFile, ...]
 
 
+class EventQueue(Protocol):
+    """The queue workers report through: ``multiprocessing.Queue`` in the
+    app, ``queue.Queue`` in tests. Both satisfy this structurally."""
+
+    def put(self, item: WorkerEvent, block: bool = True, timeout: float | None = None) -> None: ...
+
+    def put_nowait(self, item: WorkerEvent) -> None: ...
+
+    def get(self, block: bool = True, timeout: float | None = None) -> WorkerEvent: ...
+
+
 @dataclass(frozen=True, slots=True)
 class WorkerInit:
     """Everything a worker needs before its first task (§8.2).
@@ -97,7 +108,7 @@ class WorkerInit:
     grow Qt-adjacent machinery without dragging it into spawned processes.
     """
 
-    event_queue: queue.Queue[WorkerEvent]  # multiprocessing.Queue (spawn context)
+    event_queue: EventQueue  # multiprocessing.Queue (spawn context) in the app
     blocks_dir: str | None  # <run_dir>/blocks
     run_dir: str
     block_snapshot_hash: str

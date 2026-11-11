@@ -32,6 +32,7 @@ import psutil  # type: ignore[import-untyped]  # psutil ships no py.typed; types
 
 from pic_utils.core.errors import POOL_UNSTABLE, RunError
 from pic_utils.runner.protocol import (
+    EventQueue,
     ExperimentOutcome,
     ExperimentStarted,
     ExperimentTask,
@@ -244,7 +245,7 @@ class SupervisedPool:
 
     def _drain_events(self) -> None:
         """Consume worker events until the pool closes (§8.2)."""
-        events = self._init.event_queue if self._init is not None else None
+        events: EventQueue | None = self._init.event_queue if self._init is not None else None
         if events is None:
             return
         while not self._closed.is_set():

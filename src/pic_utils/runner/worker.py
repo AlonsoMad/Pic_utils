@@ -14,7 +14,6 @@ import json
 import logging
 import os
 import pkgutil
-import queue
 import sys
 import time
 from collections.abc import Iterator, Mapping
@@ -45,11 +44,11 @@ from pic_utils.pipeline.model import Pipeline
 from pic_utils.runner.manifest import RunStore
 from pic_utils.runner.memory import MemoryGuard
 from pic_utils.runner.protocol import (
+    EventQueue,
     ExperimentOutcome,
     ExperimentStarted,
     ExperimentTask,
     ResultFile,
-    WorkerEvent,
     WorkerInit,
     WorkerLog,
     WorkerReady,
@@ -69,7 +68,7 @@ if TYPE_CHECKING:
 _worker_snapshot: _WorkerSnapshot | None = None
 _worker_snapshot_hash: str = ""
 _worker_snapshot_errors: tuple[BlockLoadError, ...] = ()
-_worker_events: queue.Queue[WorkerEvent] | None = None
+_worker_events: EventQueue | None = None
 _worker_pid: int = 0
 
 
@@ -103,7 +102,7 @@ class _WorkerSnapshot:
 class _QueueLogHandler(logging.Handler):
     """Forwards worker log records to the parent's run.log via the queue."""
 
-    def __init__(self, events: queue.Queue[WorkerEvent], pid: int) -> None:
+    def __init__(self, events: EventQueue, pid: int) -> None:
         super().__init__(level=logging.DEBUG)
         self._events = events
         self._pid = pid
@@ -126,7 +125,7 @@ class _QueueLogHandler(logging.Handler):
             self.handleError(record)
 
 
-def init_worker(init: WorkerInit, events: queue.Queue[WorkerEvent]) -> None:
+def init_worker(init: WorkerInit, events: EventQueue) -> None:
     """Initialize one worker process (§8.2).
 
     1. Record the PID in the event queue (``WorkerReady``).
@@ -149,7 +148,7 @@ def init_worker(init: WorkerInit, events: queue.Queue[WorkerEvent]) -> None:
     _set_snapshot(init.block_snapshot_hash, blocks_dir)
 
 
-def _install_queue_log_handler(events: queue.Queue[WorkerEvent], pid: int) -> None:
+def _install_queue_log_handler(events: EventQueue, pid: int) -> None:
     handler = _QueueLogHandler(events, pid)
     logging.getLogger().addHandler(handler)
 
@@ -205,10 +204,12 @@ def _set_snapshot(expected_hash: str, blocks_dir: Path | None) -> None:
     )
     user_entries: list[tuple[str, str]] = []
     if blocks_dir is not None and blocks_dir.is_dir():
+        # hash_user_files (§5.5) hashes every *.py under the folder via rglob,
+        # excluding only __pycache__; native separators match the registry.
         user_entries = sorted(
             (str(path.relative_to(blocks_dir)), content_hash(path))
-            for path in blocks_dir.glob("*.py")
-            if not path.name.startswith("_")
+            for path in blocks_dir.rglob("*.py")
+            if "__pycache__" not in path.parts
         )
     payload = json.dumps(
         {"builtins": builtin_entries, "user": user_entries},
