@@ -1,0 +1,8 @@
+{
+  "format": "pic_utils.preset",
+  "version": 1,
+  "kind": "params",
+  "name": "Blue channel mask",
+  "block": "channel_mask",
+  "params": {"channel": "B", "low": 0, "high": 120, "soft": false, "invert": false}
+}

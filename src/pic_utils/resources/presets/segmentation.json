@@ -1,0 +1,17 @@
+{
+  "format": "pic_utils.preset",
+  "version": 1,
+  "kind": "pipeline",
+  "name": "Segmentation layers",
+  "pipeline": {
+    "steps": [
+      {
+        "id": "segment",
+        "block": "segment",
+        "params": {"clusters": 6, "use_superpixels": true, "modular_recolor": true},
+        "bypass": false,
+        "mask_bindings": {}
+      }
+    ]
+  }
+}

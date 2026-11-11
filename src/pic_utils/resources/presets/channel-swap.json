@@ -1,0 +1,17 @@
+{
+  "format": "pic_utils.preset",
+  "version": 1,
+  "kind": "pipeline",
+  "name": "Channel permutation",
+  "pipeline": {
+    "steps": [
+      {
+        "id": "permute",
+        "block": "channel_permute",
+        "params": {"order": "bgr"},
+        "bypass": false,
+        "mask_bindings": {}
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "format": "pic_utils.preset",
+  "version": 1,
+  "kind": "params",
+  "name": "Strong exposure blend",
+  "block": "double_exposure",
+  "params": {"exposure_factor": 0.25, "resize_to_match": true}
+}

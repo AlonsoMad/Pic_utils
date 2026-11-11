@@ -33,12 +33,9 @@ from pic_utils.ui.canvas.page import CanvasPage
 from pic_utils.ui.dialogs.settings_dialog import SettingsDialog
 from pic_utils.ui.i18n import LanguageManager, retranslate_tree
 from pic_utils.ui.lab.page import LabPage
+from pic_utils.ui.lab.project_actions import CANVAS_SUFFIX, IMAGE_SUFFIXES, PROJECT_SUFFIX
 
-__all__ = ["MainWindow", "PROJECT_SUFFIX", "CANVAS_SUFFIX", "IMAGE_SUFFIXES"]
-
-PROJECT_SUFFIX = ".puproject"
-CANVAS_SUFFIX = ".pucanvas"
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+__all__ = ["MainWindow"]
 
 
 class MainWindow(QMainWindow):
