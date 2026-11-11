@@ -83,25 +83,30 @@ class TestServeRequest:
         assert response.layers >= 1
 
 
+@pytest.fixture
+def pane(qtbot: object):
+    """A preview pane whose client is shut down at teardown (no leaks)."""
+    widget = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
+    qtbot.addWidget(widget)  # type: ignore[attr-defined]
+    yield widget
+    widget.shutdown()
+
+
 class TestPreviewPane:
-    def test_request_renders_after_debounce(self, qtbot: object, source_png: Path) -> None:
-        pane = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
-        qtbot.addWidget(pane)  # type: ignore[attr-defined]
+    def test_request_renders_after_debounce(
+        self, pane, qtbot, source_png: Path
+    ) -> None:
         updates: list[tuple[int, int]] = []
         pane.preview_updated.connect(lambda g, ms: updates.append((g, ms)))
         pane.request({"steps": [{"id": "a", "block": "channel_permute"}]}, str(source_png))
-        qtbot.waitUntil(lambda: bool(updates), timeout=10_000)  # type: ignore[attr-defined]
+        qtbot.waitUntil(lambda: bool(updates), timeout=10_000)
         assert updates[0][0] == 1
 
-    def test_no_source_shows_placeholder(self, qtbot: object) -> None:
-        pane = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
-        qtbot.addWidget(pane)  # type: ignore[attr-defined]
+    def test_no_source_shows_placeholder(self, pane) -> None:
         pane.request({"steps": []}, None)
         assert pane._stack.currentWidget() is pane._image
 
-    def test_stale_generation_dropped(self, qtbot: object, source_png: Path) -> None:
-        pane = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
-        qtbot.addWidget(pane)  # type: ignore[attr-defined]
+    def test_stale_generation_dropped(self, pane) -> None:
         updates: list[int] = []
         pane.preview_updated.connect(lambda g, _ms: updates.append(g))
         stale = PreviewResponse(generation=1, png_bytes=b"x", error=None, elapsed_ms=1, layers=1)
@@ -109,9 +114,7 @@ class TestPreviewPane:
         pane._on_response(stale)
         assert updates == []
 
-    def test_error_displayed_non_modally(self, qtbot: object) -> None:
-        pane = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
-        qtbot.addWidget(pane)  # type: ignore[attr-defined]
+    def test_error_displayed_non_modally(self, pane) -> None:
         failures: list[str] = []
         pane.preview_failed.connect(failures.append)
         error = PreviewResponse(generation=1, png_bytes=None, error="boom", elapsed_ms=1, layers=0)
@@ -121,9 +124,7 @@ class TestPreviewPane:
         assert not pane._error.isHidden()
         assert failures == ["boom"]
 
-    def test_restart_replaces_client(self, qtbot: object) -> None:
-        pane = PreviewPane(snapshot_dir_provider=lambda: None, debounce_ms=10)
-        qtbot.addWidget(pane)  # type: ignore[attr-defined]
+    def test_restart_replaces_client(self, pane) -> None:
         pane.restart()
         assert pane._client is not None
         pane.shutdown()

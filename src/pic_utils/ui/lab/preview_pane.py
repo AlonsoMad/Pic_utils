@@ -150,7 +150,7 @@ class PreviewPane(QWidget):
             self.preview_failed.emit(response.error)
             return
         assert response.png_bytes is not None
-        image = QImage.fromData(response.png_bytes, b"PNG")
+        image = QImage.fromData(response.png_bytes)
         if image.isNull():
             self._error.setText(self.tr("The preview returned an unreadable image"))
             self._error.show()
