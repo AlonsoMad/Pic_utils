@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -32,14 +33,12 @@ from pic_utils.ui.i18n import LanguageManager
 __all__ = ["SettingsDialog"]
 
 
-def _browse_row(
-    line: QLineEdit, parent: QDialog, title: str
-) -> tuple[QWidget, QPushButton]:
+def _browse_row(line: QLineEdit, parent: QDialog, title: str) -> tuple[QWidget, QPushButton]:
     row = QWidget(parent)
     layout = QHBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.addWidget(line)
-    button = QPushButton(parent.tr("Browse…"))
+    button = QPushButton(QCoreApplication.translate("SettingsDialog", "Browse…"))
     layout.addWidget(button)
     button.clicked.connect(lambda: _pick_folder(line, parent, title))
     return row, button
@@ -117,14 +116,10 @@ class SettingsDialog(QDialog):
         self._language_note = note
         form.addRow(self._row("language", self._language), language_row)
         form.addRow(self._row("theme", self._theme), self._theme)
-        blocks_row, blocks_button = _browse_row(
-            self._blocks_folder, self, self.tr("Blocks folder")
-        )
+        blocks_row, blocks_button = _browse_row(self._blocks_folder, self, self.tr("Blocks folder"))
         self._browse_buttons["blocks_folder"] = blocks_button
         form.addRow(self._row("blocks_folder", blocks_row), blocks_row)
-        results_row, results_button = _browse_row(
-            self._results_root, self, self.tr("Results root")
-        )
+        results_row, results_button = _browse_row(self._results_root, self, self.tr("Results root"))
         self._browse_buttons["results_root"] = results_button
         form.addRow(self._row("results_root", results_row), results_row)
 

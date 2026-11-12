@@ -125,7 +125,7 @@ class CanvasActions(QObject):
     def _choose_save_path(self, parent: QWidget | None) -> Path | None:
         chosen, _ = QFileDialog.getSaveFileName(
             parent,
-            parent.tr("Save canvas") if parent else "Save canvas",
+            self.tr("Save canvas"),
             "",
             _CANVAS_FILTER,
         )
@@ -216,7 +216,7 @@ class CanvasActions(QObject):
     def open_dialog(self, parent: QWidget | None = None) -> CanvasDoc | None:
         chosen, _ = QFileDialog.getOpenFileName(
             parent,
-            parent.tr("Open canvas") if parent else "Open canvas",
+            self.tr("Open canvas"),
             "",
             _CANVAS_FILTER,
         )

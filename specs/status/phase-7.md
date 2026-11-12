@@ -64,8 +64,10 @@ $ QT_QPA_PLATFORM=offscreen uv run pytest
   upscales the proxy (§10.7 documented limitation).
 - The canvas file suffix is `.pucanvas` (the shell constant from P5-08); the
   assets folder is `<file>.assets`.
-- The i18n catalogs were not regenerated for the new Canvas strings; English
-  fallback until `pyside6-lupdate`/`pyside6-lrelease` run.
+- The i18n catalogs were regenerated for the Canvas strings after the phase
+  gate; four `parent.tr(...)` call sites were switched to `self.tr(...)`
+  (or an explicit `QCoreApplication.translate` context) so the runtime
+  lookup context matches the catalog.
 - Canvas test modules use `test_canvas_*` basenames because pytest's prepend
   import mode rejects duplicate basenames across test directories
   (`tests/pipeline/test_model.py` and `tests/runner/test_integration.py`

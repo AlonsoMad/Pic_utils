@@ -67,9 +67,13 @@ class ProjectFileError(Exception):
 
 
 def _relative(path: Path, project_dir: Path) -> str:
-    """Relative to the project dir when inside it, absolute otherwise (§17.1)."""
+    """Relative to the project dir when inside it, absolute otherwise (§17.1).
+
+    Relative paths always use POSIX separators so a project file saved on
+    Windows opens on Linux and vice versa; ``Path`` accepts both at load.
+    """
     try:
-        return str(path.resolve().relative_to(project_dir.resolve()))
+        return path.resolve().relative_to(project_dir.resolve()).as_posix()
     except ValueError:
         return str(path)
 
@@ -275,7 +279,7 @@ class ProjectActions(QObject):
         if target is None:
             chosen, _ = QFileDialog.getSaveFileName(
                 parent,
-                parent.tr("Save project") if parent else "Save project",
+                self.tr("Save project"),
                 "",
                 "Pic Utils project (*.puproject)",
             )
