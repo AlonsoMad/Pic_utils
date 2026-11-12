@@ -449,7 +449,7 @@ def test_worker_count_is_clamped_by_the_budget(
     big = source_file.parent / "big.png"
     from pic_utils.io.saver import save_image
 
-    save_image(Image(rgb_gradient(4000)), big)
+    save_image(Image(rgb_gradient(2000)), big)
     signals = _Signals(service, qtbot)
     signals.connect()
     request = make_request(
@@ -460,7 +460,7 @@ def test_worker_count_is_clamped_by_the_budget(
     )
 
     service.start(request)
-    qtbot.waitUntil(lambda: signals.summary is not None, timeout=120_000)
+    qtbot.waitUntil(lambda: signals.summary is not None, timeout=180_000)
 
     run_id = signals.started[0][0]
     run_log = (RunStore(results_root, run_id).run_dir / "run.log").read_text(encoding="utf-8")

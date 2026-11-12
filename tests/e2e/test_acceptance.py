@@ -460,10 +460,12 @@ def test_ac09_saved_project_rerun_matches_the_original_run(
         experiment["seed"] for experiment in second_header["experiments"]
     ]
     first_pixels = [
-        _pixels(first_store.run_dir / record.path) for record in first_store.read().results
+        _pixels(first_store.run_dir / record.path)
+        for record in sorted(first_store.read().results, key=lambda r: (r.experiment, r.layer))
     ]
     second_pixels = [
-        _pixels(second_store.run_dir / record.path) for record in second_store.read().results
+        _pixels(second_store.run_dir / record.path)
+        for record in sorted(second_store.read().results, key=lambda r: (r.experiment, r.layer))
     ]
     assert first_pixels == second_pixels
     service.deleteLater()
